@@ -28,8 +28,12 @@ Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladul
   cada hora de 9:20 a 23:20 y a las 04:30 (refresca 3 días; fichajes 21). Carga inicial o
   rehacer un rango: `python3 historico.py --desde 2023-01-01 [--hasta …] [--solo ventas,productos]`.
   Hay ventas en HiOffice desde 2023.
-- `app.py` (servicio `app.service`, 127.0.0.1:8765) sirve `app/` (PWA: index.html, manifest,
-  sw.js, iconos) y `/api/datos?desde&hasta[&local]`. Solo lee el histórico, no llama a HiOffice.
+- `app.py` (servicio `app.service`, 127.0.0.1:8765, publicado en https://app.ladulcealianza.com
+  con Caddy en /etc/caddy/Caddyfile) sirve `app/` (PWA: index.html, manifest,
+  sw.js, iconos) y `/api/datos?desde&hasta[&local]`. Si el periodo llega a hoy, lee hoy en directo
+  de HiOffice (como mucho una vez por minuto) y lo guarda en el histórico.
+- Comparaciones: hasta las 22:00 hoy está "abierto": "Hoy" se enseña junto al mismo día completo de
+  la semana pasada, sin %, y los periodos de varios días comparan solo días cerrados (hoy va aparte).
 - Acceso: código de 6 cifras que el bot manda por Telegram a `TELEGRAM_USUARIOS`; la sesión
   (cookie de un año) se guarda en `datos/sesiones.json`.
 - Tras cambiar `app.py`: `systemctl --user restart app.service`. Si se cambia algo de `app/`,

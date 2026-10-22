@@ -8,9 +8,10 @@ HTTPS con un proxy delante. Sirve la web de app/ y una API de solo lectura:
   POST /api/codigo        manda un código de 6 cifras por Telegram a TELEGRAM_USUARIOS
   POST /api/entrar        {"codigo": "123456"} → cookie de sesión de un año
   GET  /api/datos?desde=AAAA-MM-DD&hasta=AAAA-MM-DD[&local=Paseo]
+                          si el periodo llega a hoy, antes lee hoy en directo de HiOffice
   GET  /api/salir
 
-Los datos los carga historico.py; la app no consulta HiOffice.
+Los datos los carga historico.py; la app solo consulta HiOffice para el día de hoy.
 """
 import datetime as dt
 import http.server
@@ -36,6 +37,8 @@ DURACION_SESION = 365 * 24 * 3600
 CODIGO_VALIDEZ = 600
 MAX_INTENTOS = 5
 MAX_DIAS_CIERRES = 62          # el detalle de cierres solo se manda en periodos cortos
+DIRECTO_CADA = 60              # segundos mínimos entre dos lecturas en directo de hoy en HiOffice
+TOKEN_VIDA = 1200              # se rehace el login de HiOffice cada 20 minutos
 TIPOS = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".json": "application/json",
          ".webmanifest": "application/manifest+json", ".svg": "image/svg+xml", ".png": "image/png"}
@@ -44,6 +47,34 @@ cfg = base.cargar_env()
 USUARIOS = [x.strip() for x in cfg.get("TELEGRAM_USUARIOS", "").replace(";", ",").split(",") if x.strip()]
 cerrojo = threading.Lock()
 codigo_actual = {"valor": None, "caduca": 0, "intentos": 0, "enviado": 0}
+cerrojo_directo = threading.Lock()
+directo = {"token": None, "token_t": 0, "ultimo": 0}
+
+
+def refrescar_hoy():
+    """Lee de HiOffice las ventas, artículos y cierres de hoy y los guarda en el histórico.
+    Como mucho una vez por minuto; si HiOffice falla se sirve lo último guardado."""
+    with cerrojo_directo:
+        if time.time() - directo["ultimo"] < DIRECTO_CADA:
+            return directo["ultimo"]
+        hoy = dt.date.today()
+        for intento in range(2):
+            try:
+                if not directo["token"] or time.time() - directo["token_t"] > TOKEN_VIDA:
+                    directo["token"], directo["token_t"] = base.login(cfg), time.time()
+                con = historico.conectar()
+                try:
+                    historico.cargar_ventas(con, directo["token"], hoy, hoy)
+                    historico.cargar_productos(con, directo["token"], hoy, hoy)
+                    historico.cargar_cierres(con, directo["token"], hoy, hoy)
+                finally:
+                    con.close()
+                directo["ultimo"] = time.time()
+                break
+            except (Exception, SystemExit) as e:   # login() hace sys.exit si no hay token
+                print(f"directo: {str(e)[:120]}", flush=True)
+                directo["token"] = None   # el token puede haber caducado: se rehace el login
+        return directo["ultimo"]
 
 
 def leer_sesiones():
@@ -192,7 +223,13 @@ class Manejador(http.server.BaseHTTPRequestHandler):
                 return self.responder(400, {"error": "fechas"})
             if hasta < desde or (hasta - desde).days > 1200:
                 return self.responder(400, {"error": "rango"})
-            return self.responder(200, datos(desde, hasta, (q.get("local") or [None])[0]))
+            en_directo = None
+            if hasta >= dt.date.today():
+                ts = refrescar_hoy()
+                en_directo = dt.datetime.fromtimestamp(ts).isoformat(timespec="seconds") if ts else None
+            res = datos(desde, hasta, (q.get("local") or [None])[0])
+            res["directo"] = en_directo
+            return self.responder(200, res)
         if url.path == "/api/salir":
             return self.responder(200, {"ok": True},
                                   cabeceras=[("Set-Cookie", "lda=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict")])

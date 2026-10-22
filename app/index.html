@@ -161,6 +161,11 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 .btn.sec { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
 .msg { font-size: 14px; color: var(--text-2); min-height: 20px; }
 .cargando { opacity: .55; transition: opacity .2s; }
+#vivo h2 { display: flex; align-items: center; gap: 6px; }
+#vivo h2 i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: inline-block; }
+.vivo-datos { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; }
+.vivo-datos b { display: block; font-size: 20px; letter-spacing: -.02em; }
+.vivo-datos span { font-size: 12px; color: var(--text-2); }
 </style>
 </head>
 <body>
@@ -201,6 +206,7 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 
 <main id="main">
   <section class="vista activa" id="v-resumen">
+    <div class="card" id="vivo" hidden></div>
     <div class="kpis" id="kpis"></div>
     <div class="card"><h2>Ventas</h2><p class="sub" id="ventas-sub"></p><div class="legend" id="ventas-ley"></div><div class="chart" id="ch-ventas"></div></div>
     <div class="card" id="card-eurh"><h2>€ por hora trabajada</h2><p class="sub">Ventas de tiendas y cafeterías entre las horas fichadas en cada local. El Obrador no cuenta.</p><div class="chart" id="ch-eurh"></div></div>
@@ -272,7 +278,7 @@ const fechaLarga = s => { const d = deIso(s); return `${DIAS_LARGO[d.getDay()]} 
 const menosAnio = s => { const d = deIso(s); d.setFullYear(d.getFullYear() - 1); return iso(d); };
 
 const PRESETS = [
-  ["hoy", "Hoy"], ["ayer", "Ayer"], ["7d", "7 días"], ["mes", "Este mes"],
+  ["hoy", "Hoy"], ["ayer", "Ayer"], ["7d", "7 días"], ["semana", "Semana"], ["mes", "Este mes"],
   ["mesant", "Mes pasado"], ["30d", "30 días"], ["anio", "Este año"], ["12m", "12 meses"], ["rango", "Fechas…"],
 ];
 
@@ -283,6 +289,7 @@ function rangoPreset(p) {
     case "hoy": return [h, h];
     case "ayer": return [masDias(h, -1), masDias(h, -1)];
     case "7d": return [masDias(h, -6), h];
+    case "semana": return [masDias(h, -((d.getDay() + 6) % 7)), h];   // de lunes a hoy
     case "30d": return [masDias(h, -29), h];
     case "mes": return [primero(d.getFullYear(), d.getMonth()), h];
     case "mesant": return [primero(d.getFullYear(), d.getMonth() - 1), ultimo(d.getFullYear(), d.getMonth() - 1)];
@@ -298,6 +305,8 @@ function rangoPreset(p) {
 function rangoComparacion(desde, hasta, preset, modo) {
   const n = entre(desde, hasta) + 1;
   const calendario = ["mes", "mesant", "anio"].includes(preset);
+  // Semana: los mismos días (lunes → hoy) de la semana pasada o de hace 52 semanas
+  if (preset === "semana") return modo === "anio" ? [masDias(desde, -364), masDias(hasta, -364)] : [masDias(desde, -7), masDias(hasta, -7)];
   if (modo === "anio") {
     return calendario || n > 120 ? [menosAnio(desde), menosAnio(hasta)] : [masDias(desde, -364), masDias(hasta, -364)];
   }
@@ -338,19 +347,34 @@ async function pedirDatos(desde, hasta) {
   return r.json();
 }
 
+// Hasta esta hora el día de hoy se considera abierto: no se compara con días completos
+const HORA_CIERRE = 22;
+const diaAbierto = () => new Date().getHours() < HORA_CIERRE;
+
 let peticion = 0;
 async function cargar() {
   if (estado.preset !== "rango") [estado.desde, estado.hasta] = rangoPreset(estado.preset);
-  const [cd, ch] = rangoComparacion(estado.desde, estado.hasta, estado.preset, estado.comparar);
+  const h = hoy();
+  // Con hoy sin cerrar: un periodo de varios días se compara solo con sus días cerrados
+  // (hoy va aparte, en directo); "Hoy" solo se enseña junto al mismo día completo de la semana pasada.
+  const parcial = estado.hasta === h && diaAbierto();
+  estado.soloHoy = parcial && estado.desde >= h;
+  estado.conVivo = parcial && !estado.soloHoy;
+  estado.ddesde = estado.desde;
+  estado.dhasta = estado.conVivo ? masDias(h, -1) : estado.hasta;
+  const [cd, ch] = rangoComparacion(estado.ddesde, estado.dhasta, estado.preset, estado.comparar);
   estado.cdesde = cd; estado.chasta = ch;
   persistir();
   pintarCabecera();
   const id = ++peticion;
   $("#main").classList.add("cargando");
   try {
-    const [act, cmp] = await Promise.all([pedirDatos(estado.desde, estado.hasta), pedirDatos(cd, ch)]);
+    const hAnt = masDias(h, estado.comparar === "anio" ? -364 : -7);
+    const [act, cmp, vivo, vivoC] = await Promise.all([
+      pedirDatos(estado.ddesde, estado.dhasta), pedirDatos(cd, ch),
+      estado.conVivo ? pedirDatos(h, h) : null, estado.conVivo ? pedirDatos(hAnt, hAnt) : null]);
     if (id !== peticion) return;
-    estado.act = act; estado.cmp = cmp; estado.ultima = Date.now();
+    estado.act = act; estado.cmp = cmp; estado.vivo = vivo; estado.vivoC = vivoC; estado.ultima = Date.now();
     rellenarLocales(act.locales);
     pintar();
   } catch (e) {
@@ -432,8 +456,10 @@ function textoRango(a, b) {
   return a === b ? fechaLarga(a) : `${fechaCorta(a)} – ${fechaCorta(b)} ${deIso(b).getFullYear()}`;
 }
 function pintarCabecera() {
-  $("#periodo").innerHTML = `${esc(textoRango(estado.desde, estado.hasta))}${estado.hasta === hoy() ? " (hasta ahora)" : ""}`
-    + ` · <span style="color:var(--muted)">comparado con ${esc(textoRango(estado.cdesde, estado.chasta))}</span>`;
+  const nota = estado.soloHoy ? " (hasta ahora)" : estado.conVivo ? " (días cerrados; hoy va aparte)" : "";
+  const cmp = estado.soloHoy ? `referencia: ${esc(textoRango(estado.cdesde, estado.chasta))}, día completo`
+    : `comparado con ${esc(textoRango(estado.cdesde, estado.chasta))}`;
+  $("#periodo").innerHTML = `${esc(textoRango(estado.ddesde, estado.dhasta))}${nota} · <span style="color:var(--muted)">${cmp}</span>`;
 }
 
 // ---- cálculos ----
@@ -448,6 +474,7 @@ function totales(d) {
            olvidos: sum(d.personal, p => p.olvidos), vTiendas, horasTodas };
 }
 function delta(a, b, invertido) {
+  if (estado.soloHoy) return `<span class="delta flat">día completo:</span>`;
   if (!b) return `<span class="delta flat">—</span>`;
   const v = (a - b) / Math.abs(b) * 100;
   if (Math.abs(v) < 0.5) return `<span class="delta flat">= 0 %</span>`;
@@ -546,11 +573,27 @@ function barras(cont, puntos, { fmt = eur, alto = 190, nombreA = "Actual", nombr
 // ---- vistas ----
 function pintar() {
   const { act, cmp } = estado;
-  $("#actualizado").textContent = act.actualizado ? `act. ${act.actualizado.slice(11, 16)}` : "";
+  const directo = act.directo || estado.vivo?.directo;
+  $("#actualizado").textContent = directo ? `● en directo ${directo.slice(11, 16)}`
+    : act.actualizado ? `act. ${act.actualizado.slice(11, 16)}` : "";
   pintarResumen(act, cmp); pintarLocales(act, cmp); pintarProductos(); pintarPersonal(act, cmp); pintarCierres(act);
 }
 
+function pintarVivo() {
+  const caja = $("#vivo");
+  caja.hidden = !estado.conVivo || !estado.vivo || estado.local === "Obrador";
+  if (caja.hidden) return;
+  const v = totales(estado.vivo), c = totales(estado.vivoC), hora = (estado.vivo.directo || "").slice(11, 16);
+  const ref = estado.vivoC.desde;
+  caja.innerHTML = `<h2><i></i>Hoy${hora ? ` hasta las ${hora}` : ""}</h2>
+    <p class="sub">En directo de HiOffice. No entra en la comparación de arriba hasta el cierre (${HORA_CIERRE}:00).</p>
+    <div class="vivo-datos num"><div><b>${eur(v.neto)}</b><span>ventas</span></div>
+      <div><b>${fmtN.format(v.docs)}</b><span>tickets</span></div><div><b>${fmtEur2.format(v.ticket)}</b><span>ticket medio</span></div></div>
+    <p class="sub" style="margin:8px 0 0">${esc(fechaLarga(ref))}, día completo: ${eur(c.neto)} · ${fmtN.format(c.docs)} tickets</p>`;
+}
+
 function pintarResumen(act, cmp) {
+  pintarVivo();
   const a = totales(act), c = totales(cmp);
   const sinVentas = estado.local === "Obrador";
   const kpi = (lbl, val, cval, d) => `<div class="kpi"><div class="lbl">${lbl}</div><div class="val num">${val}</div><div class="cmp num">${d} <span>${cval}</span></div></div>`;
@@ -558,8 +601,8 @@ function pintarResumen(act, cmp) {
     sinVentas ? "" : kpi("Ventas", eur(a.neto), eur(c.neto), delta(a.neto, c.neto)),
     sinVentas ? "" : kpi("Tickets", fmtN.format(a.docs), fmtN.format(c.docs), delta(a.docs, c.docs)),
     sinVentas ? "" : kpi("Ticket medio", fmtEur2.format(a.ticket), fmtEur2.format(c.ticket), delta(a.ticket, c.ticket)),
-    kpi(sinVentas ? "Horas" : "Horas en locales", horasTxt(sinVentas ? a.horasTodas : a.horas), horasTxt(sinVentas ? c.horasTodas : c.horas), delta(sinVentas ? a.horasTodas : a.horas, sinVentas ? c.horasTodas : c.horas, true)),
-    sinVentas ? "" : kpi("€ por hora", a.eurh ? fmtEur2.format(a.eurh) : "—", c.eurh ? fmtEur2.format(c.eurh) : "—", delta(a.eurh, c.eurh)),
+    kpi(estado.soloHoy ? "Horas (fichajes ya cerrados)" : sinVentas ? "Horas" : "Horas en locales", horasTxt(sinVentas ? a.horasTodas : a.horas), horasTxt(sinVentas ? c.horasTodas : c.horas), delta(sinVentas ? a.horasTodas : a.horas, sinVentas ? c.horasTodas : c.horas, true)),
+    sinVentas ? "" : kpi("€ por hora", estado.soloHoy ? "al cierre" : a.eurh ? fmtEur2.format(a.eurh) : "—", c.eurh ? fmtEur2.format(c.eurh) : "—", delta(a.eurh, c.eurh)),
     kpi("Olvidos de salida", fmtN.format(a.olvidos), fmtN.format(c.olvidos), delta(a.olvidos, c.olvidos, true)),
   ].join("");
 
@@ -723,6 +766,9 @@ function pintarCierres(act) {
 let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => estado.act && pintarResumen(estado.act, estado.cmp), 150); });
 // Al volver a la app después de un rato, refresca
 document.addEventListener("visibilitychange", () => { if (!document.hidden && estado.act && Date.now() - (estado.ultima || 0) > 5 * 60e3) cargar(); });
+
+// Con un periodo que llega a hoy, se refresca cada 2 minutos mientras la app está a la vista
+setInterval(() => { if (!document.hidden && estado.act && estado.hasta === hoy()) cargar(); }, 120e3);
 
 pintarControles();
 $("#app").hidden = false;
