@@ -38,7 +38,12 @@ DIAS_VENTANA = 21                       # días hacia atrás que se leen (olvido
 NO_PLANTILLA = {"SUPERVISOR", "TECNICO SEISOFT", "JAVIER CS"}
 # Local de cada establecimiento de presencia, para cruzar con las ventas (el Obrador no vende)
 LOCAL_PRESENCIA = {"Tienda Paseo de Almeria": "Paseo", "Tienda Playa": "Playa", "Tienda Rambla": "Rambla",
-                   "Tienda Torrecardenas": "Torrecárdenas", "Tienda Aguadulce": "Aguadulce"}
+                   "Tienda Torrecardenas": "Torrecárdenas", "Tienda Aguadulce": "Aguadulce",
+                   # En 2023-2024 también se fichaba en la cafetería, la charcutería, la bollería y el sótano
+                   "Cafeteria Paseo": "Paseo", "Charcuteria Paseo": "Paseo", "** Bolleria Paseo **": "Paseo",
+                   "** Bolleria Paseo ** ": "Paseo", "** Sotano Paseo **": "Paseo", "Cafeteria Playa": "Playa",
+                   "Cafeteria Rambla": "Rambla", "Cafeteria Torrecardenas": "Torrecárdenas",
+                   "Cafeteria Aguadulce": "Aguadulce"}
 NOMBRE_ESTAB = {
     "Obrador": "Obrador",
     "Tienda Paseo de Almeria": "Paseo de Almería",

@@ -37,7 +37,8 @@ COLUMNAS_HORA = [
     ("Neto", "BigDecimal", "Metric", {"metricId": 1357}, 3, 5, 1),
     ("Docs", "BigDecimal", "Metric", {"metricId": 1355}, 4, 7, 1),
 ]
-FUSIONAR = {"** Bolleria Paseo **": "Tienda Paseo de Almeria"}
+# Cajas que se suman a otra: Bollería Paseo va con Tienda Paseo y Sótano Paseo con Cafetería Paseo
+FUSIONAR = {"** Bolleria Paseo **": "Tienda Paseo de Almeria", "** Sotano Paseo **": "Cafeteria Paseo"}
 NOMBRE = {
     "Cafeteria Paseo": "Cafetería Paseo", "Cafeteria Torrecardenas": "Cafetería Torrecárdenas",
     "Cafeteria Rambla": "Cafetería Rambla", "Cafeteria Aguadulce": "Cafetería Aguadulce",
@@ -136,7 +137,7 @@ def ventas_dia(token, dia, hasta=None):
         _, _cod, nombre, uds, _base, _imp, neto, docs = fila[:8]
         if nombre:
             tiendas[nombre] = {"neto": float(neto or 0), "docs": float(docs or 0), "uds": float(uds or 0)}
-    # Bollería Paseo y Tienda Paseo son una única caja: se suman en Tienda Paseo
+    # Bollería Paseo va con Tienda Paseo y Sótano Paseo con Cafetería Paseo (FUSIONAR)
     for alias, destino in FUSIONAR.items():
         src = next((k for k in tiendas if k.strip() == alias), None)
         if src:
@@ -164,7 +165,8 @@ def variacion(actual, anterior, con_importe=False):
 
 def local(nombre):
     """Nombre del local sin el tipo: 'Cafeteria Paseo' y 'Tienda Paseo de Almeria' → 'Paseo'."""
-    n = NOMBRE.get(nombre.strip(), nombre.strip().strip("*").strip())
+    n = FUSIONAR.get(nombre.strip(), nombre.strip())
+    n = NOMBRE.get(n, n.strip("*").strip())
     for pref in ("Cafetería ", "Tienda ", "Charcutería ", "Bollería "):
         n = n.replace(pref, "")
     return n.replace(" de Almería", "")
