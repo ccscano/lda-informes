@@ -66,35 +66,49 @@ def normal(nombre):
 
 
 def encaja(pda, real):
-    """¿Es `real` («NOMBRE INICIALES») la persona del nombre de venta `pda` (sin M-/T-)?
-    Admite «NOMBRE APELLIDO», «NOMBRE APELLIDO APELLIDO», «NOMBRE INICIALES» y solo «NOMBRE»."""
+    """Grado en que `real` («NOMBRE INICIALES») es la persona del nombre de venta `pda` (sin M-/T-):
+    3 apellido(s) iguales, 2 trae ya las iniciales, 1 iniciales de los apellidos, 0 no encaja.
+    Admite «NOMBRE APELLIDO», «NOMBRE APELLIDO APELLIDO», «NOMBRE INICIALES» y solo «NOMBRE» (1)."""
     p = [t for t in pda.split() if t not in PARTICULAS]
     r = [t for t in real.split() if t not in PARTICULAS]
     if len(r) < 2:
-        return False
+        return 0
     nombres_r, iniciales = r[:-1], r[-1]
+    mejor = 0
     for k in range(1, len(p) + 1):
         nombres, resto = p[:k], p[k:]
         if nombres_r[:k] != nombres:
             continue
         if not resto:
-            return True                                   # solo el nombre
-        if len(resto) == 1 and resto[0] == iniciales:
-            return True                                   # ya trae las iniciales
-        if iniciales.startswith("".join(t[0] for t in resto)):
-            return True                                   # apellido(s) enteros
-    return False
+            mejor = max(mejor, 1)                                  # solo el nombre
+        elif resto == r[k:]:
+            mejor = max(mejor, 3)                                  # mismos apellidos
+        elif len(resto) == 1 and resto[0] == iniciales:
+            mejor = max(mejor, 2)                                  # ya trae las iniciales
+        elif iniciales.startswith("".join(t[0] for t in resto)):
+            mejor = max(mejor, 1)                                  # apellido(s) enteros
+    return mejor
 
 
 def resolver(nombre_venta, dia, candidatos):
     """Trabajador de presencia de un nombre de venta, o None si no es claro. `candidatos` es
-    {nombre: días con fichaje} del local; si encajan varios, decide quién fichó ese día."""
+    {nombre: días con fichaje} del local. Gana el que mejor encaja; si empatan, quien fichó ese día
+    y, si no, quien fichó en los 60 días de alrededor (cuando se ficha con la PDA, el usuario
+    real no tiene fichaje ese día)."""
     n = normal(nombre_venta)
     if n in candidatos:
         return n
-    encajan = [c for c in candidatos if encaja(PDA.sub("", n), c)]
+    grados = {c: encaja(PDA.sub("", n), c) for c in candidatos}
+    tope = max(grados.values(), default=0)
+    encajan = [c for c, g in grados.items() if g and g == tope]
     if len(encajan) > 1:
-        encajan = [c for c in encajan if dia in candidatos[c]]
+        ese_dia = [c for c in encajan if dia in candidatos[c]]
+        if ese_dia:
+            encajan = ese_dia
+        else:
+            d = dt.date.fromisoformat(dia)
+            cerca = lambda c: any(abs((dt.date.fromisoformat(x) - d).days) <= 60 for x in candidatos[c])
+            encajan = [c for c in encajan if cerca(c)]
     return encajan[0] if len(encajan) == 1 else None
 
 
@@ -192,16 +206,33 @@ def _propuestas(con):
     return res, sin_unir
 
 
+def areas_por_tpv(con):
+    """{persona: área} de quien alguna vez fichó en un TPV de área (cafetería, charcutería, obrador…):
+    la más frecuente. Vale también para sus fichajes en el TPV de la tienda."""
+    def calcular():
+        quien = identificador(con)
+        cuenta = {}
+        for estab, emp, dia in con.execute("SELECT estab, empleado, dia FROM fichajes"):
+            a = area_fichaje(estab)
+            if a:
+                c = cuenta.setdefault(quien(emp, estab, dia), {})
+                c[a] = c.get(a, 0) + 1
+        return {p: max(c, key=c.get) for p, c in cuenta.items()}
+    return _recordado("tpv", _firma(con, "fichajes"), calcular)
+
+
 def asignador(con):
-    """Función (empleado, estab del fichaje, día) → área, con manual > TPV del área > propuesta.
+    """Función (empleado, estab del fichaje, día) → área: TPV del área de ese fichaje > elegida a
+    mano > área de la persona por otros fichajes en TPV de área > propuesta por ventas.
     El empleado se pasa antes a la persona real (fichajes hechos con el subcódigo de PDA)."""
     manual = leer_manual()
     prop, _ = propuestas(con)
+    tpv = areas_por_tpv(con)
     quien = identificador(con)
 
     def area(empleado, estab, dia=None):
         nombre = quien(empleado, estab, dia) if dia else normal(empleado)
-        return (area_fichaje(estab) or manual.get(nombre)
+        return (area_fichaje(estab) or manual.get(nombre) or tpv.get(nombre)
                 or (prop.get(nombre) or {}).get("propuesta") or SIN_AREA)
     return area
 

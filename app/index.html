@@ -771,10 +771,11 @@ function pintarPlantilla() {
     const total = p.tickets || 0;
     const rep = Object.entries(p.reparto).sort((a, b) => b[1] - a[1]).map(([a, n]) => `${a} ${pc(n / total)}`).join(" · ");
     const nota = `${horasTxt(p.horas)} en el periodo · ` + (p.origen === "tpv" ? "según el TPV donde ficha" : total ? `cobra: ${rep} (${fmtN.format(total)} tickets)` : "no cobra tickets");
-    const opciones = [`<option value="">${p.propuesta ? `Propuesta: ${esc(p.propuesta)}` : "Sin asignar"}</option>`]
+    const defecto = p.origen === "tpv" ? `Según TPV: ${esc(p.area)}` : p.propuesta ? `Propuesta: ${esc(p.propuesta)}` : "Sin asignar";
+    const opciones = [`<option value="">${defecto}</option>`]
       .concat(plantilla.areas.map(a => `<option value="${esc(a)}"${p.manual === a ? " selected" : ""}>${esc(a)}</option>`)).join("");
     html += `<div class="pl-fila${p.manual ? " manual" : ""}"><div class="nom">${esc(p.empleado.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()))}<small>${esc(nota)}</small></div>
-      ${p.origen === "tpv" && !p.manual ? `<span class="chip-area">${esc(p.area)}</span>` : `<select data-emp="${esc(p.empleado)}" aria-label="Área">${opciones}</select>`}</div>`;
+      <select data-emp="${esc(p.empleado)}" aria-label="Área">${opciones}</select></div>`;
   }
   $("#plantilla").innerHTML = html || `<div class="vacio">Sin fichajes en este periodo.</div>`;
 }
