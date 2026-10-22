@@ -3,9 +3,11 @@
 Informes automáticos de HiOffice (Hiopos) por Telegram para Carlos Cano
 (Administración, c.cano@ladulcealianza.com). Idioma de trabajo: español.
 
-Esta carpeta es `/home/lda/presencia` en el VPS `vps-1bc13e95` (OVH). El usuario `lda`
-no tiene sudo, a propósito: en este servidor también corren los advisors de inversión y el
-IB Gateway (usuario `advisor`), que **no se tocan** desde aquí.
+Esta carpeta es `/home/lda/presencia` en el VPS `vps-64775d96` (OVH, 137.74.113.152; alias ssh
+`vps-lda` en el Mac de Carlos, usuario ubuntu con sudo). Desde el 22/10/2026 el servidor es solo de
+La Dulce Alianza: los advisors de inversión y el IB Gateway siguen en el VPS antiguo (`vps-1bc13e95`,
+57.131.163.217), que **no se toca** desde aquí. El usuario `lda` no tiene sudo, a propósito.
+Cortafuegos (ufw): solo 22, 80 y 443 abiertos. Montaje inicial: `migracion/preparar_vps.sh`.
 
 ## Qué se envía y cuándo
 Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladulcealianzacom_bot.
