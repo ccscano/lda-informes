@@ -1,0 +1,10 @@
+[Unit]
+Description=Top 10 productos a las 15:05 y al cierre (22:15)
+
+[Timer]
+OnCalendar=*-*-* 15:05:00
+OnCalendar=*-*-* 22:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

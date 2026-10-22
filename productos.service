@@ -1,0 +1,11 @@
+[Unit]
+Description=Top 10 productos del día por establecimiento (HiOffice) por Telegram
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=TZ=Europe/Madrid
+WorkingDirectory=/home/ubuntu/presencia
+ExecStart=/usr/bin/python3 /home/ubuntu/presencia/productos.py

@@ -1,0 +1,18 @@
+[Unit]
+Description=Bot de consultas La Dulce Alianza (/ventas, /presencia, /semana)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=ubuntu
+Environment=TZ=Europe/Madrid
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/home/ubuntu/presencia
+ExecStart=/usr/bin/python3 /home/ubuntu/presencia/bot_lda.py
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

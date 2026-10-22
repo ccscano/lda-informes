@@ -1,0 +1,10 @@
+[Unit]
+Description=Ventas a las 15:00 y al cierre (22:10)
+
+[Timer]
+OnCalendar=*-*-* 15:00:00
+OnCalendar=*-*-* 22:10:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

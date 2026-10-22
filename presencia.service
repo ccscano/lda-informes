@@ -1,0 +1,11 @@
+[Unit]
+Description=Resumen diario del control de presencia (HiOffice) por Telegram
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Environment=TZ=Europe/Madrid
+WorkingDirectory=/home/ubuntu/presencia
+ExecStart=/usr/bin/python3 /home/ubuntu/presencia/presencia.py
