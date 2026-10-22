@@ -432,7 +432,7 @@ $("#prod-mas").onclick = () => { estado.prodLimite += 50; pintarProductos(); };
 function rellenarLocales(locales) {
   const sel = $("#local");
   const actuales = [...sel.options].slice(1).map(o => o.value).join("|");
-  const todos = [...new Set([...locales, "Obrador"])].sort((a, b) => a.localeCompare(b, "es"));
+  const todos = [...locales].sort((a, b) => a.localeCompare(b, "es"));
   if (actuales !== todos.join("|")) {
     sel.innerHTML = `<option value="">Todos los locales</option>` + todos.map(l => `<option>${esc(l)}</option>`).join("");
   }

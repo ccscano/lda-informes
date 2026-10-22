@@ -37,6 +37,8 @@ PUERTO = 8765
 DURACION_SESION = 365 * 24 * 3600
 CODIGO_VALIDEZ = 600
 MAX_INTENTOS = 5
+# Establecimientos de HiOffice que no son puntos de venta: fuera de ventas, productos y cierres
+NO_SON_LOCALES = ("Obrador", "Oficina Central", "Opera Prima")
 MAX_DIAS_CIERRES = 62          # el detalle de cierres solo se manda en periodos cortos
 DIRECTO_CADA = 60              # segundos mínimos entre dos lecturas en directo de hoy en HiOffice
 TOKEN_VIDA = 1200              # se rehace el login de HiOffice cada 20 minutos
@@ -125,7 +127,8 @@ def datos(desde, hasta, local=None, corte=None):
     con = sqlite3.connect(f"file:{historico.DB}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     d0, d1 = desde.isoformat(), hasta.isoformat()
-    filtro, args = ("AND local = ?", [local]) if local else ("", [])
+    fuera = f"AND local NOT IN ({', '.join('?' * len(NO_SON_LOCALES))})"
+    filtro, args = (f"AND local = ? {fuera}", [local, *NO_SON_LOCALES]) if local else (fuera, [*NO_SON_LOCALES])
 
     ventas = [dict(r) for r in con.execute(
         f"SELECT dia, local, grupo, SUM(neto) neto, SUM(docs) docs FROM ventas "
@@ -201,7 +204,7 @@ def datos(desde, hasta, local=None, corte=None):
             f"declarado, descuadre FROM cierres WHERE dia BETWEEN ? AND ? {filtro} ORDER BY fecha DESC",
             [d0, d1, *args])]
 
-    locales = sorted({r[0] for r in con.execute("SELECT DISTINCT local FROM ventas")})
+    locales = sorted({r[0] for r in con.execute(f"SELECT DISTINCT local FROM ventas WHERE 1 {fuera}", NO_SON_LOCALES)})
     actualizado = con.execute("SELECT MAX(actualizado) FROM cargas").fetchone()[0]
     primer_dia = con.execute("SELECT MIN(dia) FROM ventas WHERE neto > 0").fetchone()[0]
     con.close()
