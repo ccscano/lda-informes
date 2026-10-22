@@ -5,7 +5,7 @@ Indicadores de la pestaña Análisis de la app (y de Locales, Personal y Cajas) 
   mapa        venta media por día de la semana y hora
   franjas     ticket medio de desayuno, mediodía y tarde, por mes
   coste       coste de personal del periodo por local y área: horas fichadas × coste por hora del
-              trimestre (Excel de explotación: sueldos + gratificaciones + seg. social ÷ horas fichadas)
+              local en el trimestre (Excel: sueldos + gratificaciones + seg. social ÷ horas fichadas)
   margen      cuenta de explotación de los trimestres del periodo (margen bruto, personal, resultados)
   objetivo    mes en curso: objetivo = mismo mes del año anterior × (1 + subida media de los últimos
               12 meses), avance y previsión a fin de mes
@@ -52,11 +52,14 @@ def horas_por_dia(con):
             res.append((f["dia"], loc, area_de(f["empleado"], f["estab"], f["dia"]), h, f, ini,
                         ini + dt.timedelta(hours=h), estimado))
         return res
-    try:
-        mtime = os.path.getmtime(plantilla.FICHERO)
-    except OSError:
-        mtime = 0
-    return plantilla._recordado("horas_dia", (plantilla._firma(con, "fichajes"), mtime), calcular)
+    mtimes = []
+    for f in (plantilla.FICHERO, plantilla.DOTACIONES):
+        try:
+            mtimes.append(os.path.getmtime(f))
+        except OSError:
+            mtimes.append(0)
+    firma = (plantilla._firma(con, "fichajes"), plantilla._firma(con, "ventas_empleado"), *mtimes)
+    return plantilla._recordado("horas_dia", firma, calcular)
 
 
 def por_hora(con, desde, hasta, local):
@@ -108,16 +111,19 @@ def franjas(con, desde, hasta, local):
 
 
 def coste_hora(con):
-    """{(año, trim, local, área): €/hora} = coste de personal del trimestre (Excel) ÷ horas fichadas."""
+    """{(año, trim, local): €/hora} = coste de personal del local en el trimestre (Excel) ÷ horas
+    fichadas en el local. Es por local y no por área porque la nómina de quien cubre otra área
+    (p. ej. suplentes de cafetería en la tienda de Rambla) sigue cargada en su área de contrato:
+    con el precio del local, el coste sigue a las horas trabajadas de verdad en cada área."""
     horas = {}
     for dia, loc, area, h, *_ in horas_por_dia(con):
-        k = (*_trimestre(dt.date.fromisoformat(dia)), loc, area)
+        k = (*_trimestre(dt.date.fromisoformat(dia)), loc)
         horas[k] = horas.get(k, 0) + h
     coste = {}
-    for anio, trim, loc, area, imp in con.execute(
-            f"SELECT anio, trim, local, area, SUM(importe) FROM explotacion WHERE concepto IN "
-            f"({', '.join('?' * len(explotacion.PERSONAL))}) GROUP BY 1, 2, 3, 4", explotacion.PERSONAL):
-        coste[(anio, trim, loc, area)] = imp
+    for anio, trim, loc, imp in con.execute(
+            f"SELECT anio, trim, local, SUM(importe) FROM explotacion WHERE concepto IN "
+            f"({', '.join('?' * len(explotacion.PERSONAL))}) GROUP BY 1, 2, 3", explotacion.PERSONAL):
+        coste[(anio, trim, loc)] = imp
     return {k: coste[k] / horas[k] for k in coste if horas.get(k)}, coste, horas
 
 
@@ -129,14 +135,14 @@ def coste(con, desde, hasta, local):
     except Exception:   # aún no se ha subido el Excel
         return {"filas": [], "ultimo": None}
     ultimo = {}
-    for (a, t, loc, area), v in sorted(eur_h.items()):
-        ultimo[(loc, area)] = v
+    for (a, t, loc), v in sorted(eur_h.items()):
+        ultimo[loc] = v
     res = {}
     for dia, loc, area, h, *_ in horas_por_dia(con):
         if not (desde <= dia <= hasta) or (local and loc != local):
             continue
         q = _trimestre(dt.date.fromisoformat(dia))
-        precio = eur_h.get((*q, loc, area), ultimo.get((loc, area)))
+        precio = eur_h.get((*q, loc), ultimo.get(loc))
         r = res.setdefault((loc, area), {"horas": 0, "coste": 0, "sin_precio": 0})
         r["horas"] += h
         if precio:

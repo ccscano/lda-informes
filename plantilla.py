@@ -12,6 +12,7 @@ y la inicial del primer apellido es la del apellido de la PDA.
 """
 import datetime as dt
 import json
+import os
 import re
 from pathlib import Path
 
@@ -19,6 +20,9 @@ import presencia as base
 import ventas
 
 FICHERO = Path(__file__).resolve().parent / "datos" / "plantilla.json"
+# Áreas con un número fijo de personas cada día (p. ej. la Tienda de Rambla, siempre 2): las
+# titulares ocupan plaza cuando fichan y las suplentes cubren el resto según dónde cobran ese día.
+DOTACIONES = Path(__file__).resolve().parent / "datos" / "dotaciones.json"
 AREAS = ["Cafetería", "Tienda", "Charcutería", "Obrador", "Otra"]
 SIN_AREA = "Sin asignar"
 MIN_TICKETS = 10        # por debajo, no se propone área
@@ -249,6 +253,60 @@ def areas_por_tpv(con):
     return _recordado("tpv", _firma(con, "fichajes"), calcular)
 
 
+def leer_dotaciones():
+    """{local: {area, plazas, titulares, suplentes, area_suplentes}}."""
+    try:
+        return json.loads(DOTACIONES.read_text())
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def seleccion_dotaciones(con):
+    """{(local, día): personas que ese día cuentan en el área de la dotación}. Primero las titulares
+    que fichan; las plazas libres, para las suplentes que más tickets cobraron en esa área ese día
+    (a igualdad, más horas)."""
+    dot = leer_dotaciones()
+    if not dot:
+        return {}
+
+    def calcular():
+        candidatos = candidatos_por_local(con)
+        sel = {}
+        for local, d in dot.items():
+            titulares = {normal(x) for x in d.get("titulares", [])}
+            suplentes = {normal(x) for x in d.get("suplentes", [])}
+            horas, tickets = {}, {}
+            for estab, emp, dia, h in con.execute("SELECT estab, empleado, dia, horas FROM fichajes"):
+                if local_fichaje(estab) != local:
+                    continue
+                n = normal(emp)
+                if n in titulares or n in suplentes:
+                    horas[(dia, n)] = horas.get((dia, n), 0) + min(h or 0, base.MAX_HORAS)
+            for dia, estab, emp, docs in con.execute(
+                    "SELECT dia, estab, empleado, docs FROM ventas_empleado WHERE local = ?", (local,)):
+                if area_venta(estab) != d["area"]:
+                    continue
+                quien = resolver(emp, dia, candidatos.get(local, {}))
+                if quien in suplentes:
+                    tickets[(dia, quien)] = tickets.get((dia, quien), 0) + docs
+            por_dia = {}
+            for (dia, n) in horas:
+                por_dia.setdefault(dia, []).append(n)
+            for dia, gente in por_dia.items():
+                elegidas = [n for n in gente if n in titulares][:d["plazas"]]
+                libres = d["plazas"] - len(elegidas)
+                resto = sorted((n for n in gente if n in suplentes),
+                               key=lambda n: (-tickets.get((dia, n), 0), -horas[(dia, n)]))
+                sel[(local, dia)] = set(elegidas + resto[:max(libres, 0)])
+        return sel
+    try:
+        mtime = os.path.getmtime(DOTACIONES)
+    except OSError:
+        mtime = 0
+    firma = (_firma(con, "fichajes"), _firma(con, "ventas_empleado"), mtime)
+    return _recordado("dotaciones", firma, calcular)
+
+
 def asignador(con):
     """Función (empleado, estab del fichaje, día) → área: TPV del área de ese fichaje > elegida a
     mano > área de la persona por otros fichajes en TPV de área > propuesta por ventas.
@@ -257,9 +315,20 @@ def asignador(con):
     prop, _ = propuestas(con)
     tpv = areas_por_tpv(con)
     quien = identificador(con)
+    dot = leer_dotaciones()
+    miembros = {normal(n): (local, d) for local, d in dot.items()
+                for n in d.get("titulares", []) + d.get("suplentes", [])}
+    sel = seleccion_dotaciones(con)
 
     def area(empleado, estab, dia=None):
         nombre = quien(empleado, estab, dia) if dia else normal(empleado)
+        if nombre in miembros and dia and not area_fichaje(estab):
+            local, d = miembros[nombre]
+            if local_fichaje(estab) == local:
+                if nombre in sel.get((local, dia), ()):
+                    return d["area"]
+                if normal(nombre) in {normal(x) for x in d.get("suplentes", [])}:
+                    return d.get("area_suplentes", "Cafetería")
         a = area_en(manual.get(nombre), dia)
         return (area_fichaje(estab) or (a if a != SIN_AREA else None) or tpv.get(nombre)
                 or (prop.get(nombre) or {}).get("propuesta") or SIN_AREA)
@@ -315,6 +384,9 @@ def resumen(con, desde, hasta):
                     "origen": origen, "propuesta": p.get("propuesta"), "tickets": p.get("tickets", 0),
                     "reparto": p.get("reparto", {}), "manual": a_manual,
                     "tramos": manual[nombre] if isinstance(manual.get(nombre), list) else None,
+                    "dotacion": next((f"{d['area']} {l}: {d['plazas']} plazas ({'titular' if nombre in {normal(x) for x in d.get('titulares', [])} else 'suplente'})"
+                                      for l, d in leer_dotaciones().items()
+                                      if nombre in {normal(x) for x in d.get("titulares", []) + d.get("suplentes", [])}), None),
                     "horas": round(g["horas"], 1)})
     res.sort(key=lambda r: (r["local"], r["area"] != SIN_AREA, r["empleado"]))
     return {"personas": res, "areas": AREAS, "sin_unir": sorted(sin_unir.items(), key=lambda x: -x[1])[:15]}

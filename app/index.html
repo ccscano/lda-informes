@@ -257,7 +257,7 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
     <div class="card"><h2>Mapa de calor</h2><p class="sub">Venta media por día de la semana y hora. Más oscuro, más venta.</p><div class="mapa" id="mapa"></div></div>
     <div class="card"><h2>Ticket medio por franja</h2><p class="sub">Desayuno hasta las 12, mediodía de 12 a 16 y tarde desde las 16.</p><div class="franjas" id="franjas"></div><div class="tabla-scroll"><table class="tabla" id="tabla-franjas"></table></div></div>
     <div class="card"><h2>Peso de cada área</h2><p class="sub">Parte de la venta de cada local. Entre paréntesis, la diferencia en puntos frente a la comparación.</p><div class="ley" id="ley-areas"></div><div class="filas" id="peso-areas"></div></div>
-    <div class="card"><h2>Coste de personal</h2><p class="sub" id="coste-sub">Horas fichadas × coste por hora de cada área en su trimestre (sueldos + gratificaciones + seguridad social del Excel de explotación ÷ horas fichadas). Porcentaje sobre ventas sin IVA.</p><div class="tabla-scroll"><table class="tabla" id="tabla-coste"></table></div></div>
+    <div class="card"><h2>Coste de personal</h2><p class="sub" id="coste-sub"></p><div class="tabla-scroll"><table class="tabla" id="tabla-coste"></table></div></div>
     <div class="card"><h2>Cuenta de explotación</h2><p class="sub" id="margen-sub">Trimestres del Excel de explotación. Margen bruto = (ventas − compras − reparto del obrador − variación de existencias − otras secciones) ÷ ventas, como en la hoja «Ratios».</p><div class="tabla-scroll"><table class="tabla" id="tabla-margen"></table></div>
       <div class="subir"><button class="btn sec" id="subir-excel" style="padding:8px 12px">Subir Excel de explotación</button><input type="file" id="fichero-excel" accept=".xlsx" hidden><span id="subir-msg"></span></div></div>
   </section>
@@ -857,7 +857,7 @@ function pintarPlantilla() {
       .concat(plantilla.areas.map(a => `<option value="${esc(a)}"${p.manual === a ? " selected" : ""}>${esc(a)}</option>`)).join("");
     const tramos = p.tramos ? p.tramos.map(t => `<div class="tramo"><span>${t.desde ? `desde ${esc(fechaCorta(t.desde))} ${t.desde.slice(0, 4)}` : "antes"}: <b>${esc(t.area)}</b></span>${t.desde ? `<button data-borrar="${esc(t.desde)}" data-emp="${esc(p.empleado)}" aria-label="Quitar tramo">✕</button>` : ""}</div>`).join("") : "";
     const abierto = estado.plAbierto === p.empleado;
-    html += `<div class="pl-fila${p.manual ? " manual" : ""}"><div class="nom">${esc(p.empleado.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()))}<small>${esc(nota)}${p.tramos ? " · área por fechas" : ""}</small>
+    html += `<div class="pl-fila${p.manual ? " manual" : ""}"><div class="nom">${esc(p.empleado.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()))}<small>${esc(nota)}${p.tramos ? " · área por fechas" : ""}${p.dotacion ? ` · ${esc(p.dotacion)}` : ""}</small>
         <button class="pl-btn" data-fechas="${esc(p.empleado)}">${abierto ? "Cerrar" : "Por fechas"}</button></div>
       <select data-emp="${esc(p.empleado)}" aria-label="Área">${opciones}</select>
       ${abierto ? `<div class="pl-fechas">${tramos || `<div class="tramo">Sin tramos: el área vale para todas las fechas.</div>`}
@@ -1001,7 +1001,7 @@ function pintarAnalisis() {
   // --- coste de personal ---
   const cf = an.coste.filas, cc = {}; (anC.coste.filas || []).forEach(x => { cc[`${x.local}|${x.area}`] = x; });
   $("#coste-sub").textContent = an.coste.ultimo
-    ? `Horas fichadas × coste por hora de cada área en su trimestre (sueldos + gratificaciones + seguridad social del Excel ÷ horas fichadas); el Excel llega hasta ${an.coste.ultimo} y después se usa ese coste por hora. Porcentaje sobre ventas sin IVA.`
+    ? `Horas fichadas en cada área × coste por hora del local en su trimestre (toda la nómina del local —sueldos, gratificaciones y seguridad social del Excel— ÷ todas sus horas fichadas). Es por local porque quien cubre otra área sigue cobrando por la suya. El Excel llega hasta ${an.coste.ultimo}; después se usa ese coste por hora. Porcentaje sobre ventas sin IVA.`
     : "Sube el Excel de explotación (abajo) para calcular el coste de personal.";
   const locs = [...new Set(cf.map(x => x.local))];
   $("#tabla-coste").innerHTML = cf.length ? `<tr><th>Local · área</th><th>Horas</th><th class="opc">€/h</th><th>Coste</th><th class="opc">Ventas s/IVA</th><th>% coste</th></tr>` + locs.map(l => {
