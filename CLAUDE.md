@@ -38,6 +38,14 @@ Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladul
   a la hora actual con `ventas_hora` (ventas por hora, atributo 1077 de HiOffice; la hora en curso en
   proporción a los minutos) y los artículos en la misma proporción por local. Horas y €/h solo cuentan
   días cerrados (los fichajes de hoy no están completos); en "Hoy" salen "al cierre".
+- Áreas (plantilla.py): desde 2025 todos fichan en el TPV de la tienda de su local, así que el área
+  de cada persona (Cafetería, Tienda —con bollería—, Charcutería, Obrador) se propone según dónde cobra
+  (`ventas_empleado`, últimos 90 días de cada uno) y Carlos la corrige en la app (Personal → Área de cada
+  persona; se guarda en `datos/plantilla.json`, que manda sobre la propuesta). Los empleados de venta
+  «M-NOMBRE APELLIDO» / «T-…» son subcódigos de PDA de mañana/tarde, no personas: se unen con su usuario
+  de presencia «NOMBRE INICIALES» (iniciales de los dos apellidos) dentro del mismo local.
+  Fuera de ventas: Obrador, Oficina Central y Opera Prima (`NO_SON_LOCALES` en app.py); el Obrador sí
+  sale en Personal. Sótano Paseo se suma a Cafetería Paseo y Bollería a Tienda Paseo (`ventas.FUSIONAR`).
 - Acceso: código de 6 cifras que el bot manda por Telegram a `TELEGRAM_USUARIOS`; la sesión
   (cookie de un año) se guarda en `datos/sesiones.json`.
 - Tras cambiar `app.py`: `systemctl --user restart app.service`. Si se cambia algo de `app/`,

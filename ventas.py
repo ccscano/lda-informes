@@ -37,6 +37,13 @@ COLUMNAS_HORA = [
     ("Neto", "BigDecimal", "Metric", {"metricId": 1357}, 3, 5, 1),
     ("Docs", "BigDecimal", "Metric", {"metricId": 1355}, 4, 7, 1),
 ]
+# Mismo bloque por empleado que cobra (atributo 41, el mismo que en presencia)
+COLUMNAS_EMPLEADO = [
+    ("Establecimiento", "String", "Attribute", {"attributeId": 1061}, 1, 1, 1),
+    ("Empleado", "String", "Attribute", {"attributeId": 41}, 2, 97, 1),
+    ("Neto", "BigDecimal", "Metric", {"metricId": 1357}, 3, 5, 1),
+    ("Docs", "BigDecimal", "Metric", {"metricId": 1355}, 4, 7, 1),
+]
 # Cajas que se suman a otra: Bollería Paseo va con Tienda Paseo y Sótano Paseo con Cafetería Paseo
 FUSIONAR = {"** Bolleria Paseo **": "Tienda Paseo de Almeria", "** Sotano Paseo **": "Cafeteria Paseo"}
 NOMBRE = {
@@ -69,6 +76,23 @@ def ventas_horas(token, dia):
         s[0] += float(neto or 0)
         s[1] += float(docs or 0)
     return [{"estab": e, "hora": h, "neto": n, "docs": d} for (e, h), (n, d) in suma.items()]
+
+
+def ventas_empleados(token, dia):
+    """[{estab, empleado, neto, docs}] del día: quién cobra en cada caja. Los empleados M-/T- son
+    subcódigos de PDA (mañana/tarde) de un trabajador, no personas: se resuelven en la app."""
+    datos = consulta(token, COLUMNAS_EMPLEADO, dia, dia, limite=3000)
+    suma = {}
+    for fila in datos.get("rows") or []:
+        _, nombre, empleado, neto, docs = fila[:5]
+        if not nombre or not empleado:
+            continue
+        nombre = nombre.strip()
+        nombre = FUSIONAR.get(nombre, nombre)
+        s = suma.setdefault((nombre, empleado.strip()), [0.0, 0.0])
+        s[0] += float(neto or 0)
+        s[1] += float(docs or 0)
+    return [{"estab": e, "empleado": p, "neto": n, "docs": d} for (e, p), (n, d) in suma.items()]
 
 
 def consulta(token, columnas, dia, hasta, limite):

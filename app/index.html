@@ -161,6 +161,14 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 .btn.sec { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
 .msg { font-size: 14px; color: var(--text-2); min-height: 20px; }
 .cargando { opacity: .55; transition: opacity .2s; }
+.pl-local { font-weight: 650; margin: 14px 0 4px; }
+.pl-local:first-child { margin-top: 0; }
+.pl-fila { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); }
+.pl-fila .nom { flex: 1; min-width: 0; }
+.pl-fila .nom small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+.pl-fila select { max-width: 52%; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; }
+.pl-fila.manual select { border-color: var(--accent); }
+.chip-area { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -209,7 +217,7 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 
   <section class="vista" id="v-locales">
     <div class="card"><h2>Por local</h2><p class="sub">Cafetería + tienda (+ charcutería en Paseo). Entre paréntesis, la variación frente a la comparación.</p><div class="filas" id="locales"></div></div>
-    <div class="card"><h2>Por establecimiento</h2><p class="sub">Cada TPV por separado.</p><div class="filas" id="estabs"></div></div>
+    <div class="card"><h2>Por área</h2><p class="sub">Cafetería, tienda (con bollería) y charcutería de cada local, con las horas de la gente de esa área (ver Personal → Área de cada persona).</p><div class="filas" id="estabs"></div></div>
   </section>
 
   <section class="vista" id="v-productos">
@@ -228,8 +236,9 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
   </section>
 
   <section class="vista" id="v-personal">
-    <div class="card"><h2>Horas por local</h2><p class="sub">Fichajes cerrados. Los olvidos de salida se estiman hasta la última salida del local ese día.</p><div class="filas" id="horas-local"></div></div>
+    <div class="card"><h2>Horas por local y área</h2><p class="sub">Fichajes cerrados. Los olvidos de salida se estiman hasta la última salida del local ese día.</p><div class="filas" id="horas-local"></div></div>
     <div class="card"><h2>Personas</h2><p class="sub">Horas de fichajes completos. Los olvidos de salida se cuentan aparte.</p><div class="filas" id="personal"></div></div>
+    <div class="card"><h2>Área de cada persona</h2><p class="sub">Todos fichan en el TPV de la tienda, así que el área se propone según dónde cobra cada uno (últimos 90 días, uniendo los subcódigos M-/T- de la PDA). Cámbiala si no es correcta: se guarda y se aplica a todas las horas.</p><div id="plantilla"><div class="vacio">Cargando…</div></div></div>
   </section>
 
   <section class="vista" id="v-cajas">
@@ -364,6 +373,7 @@ async function cargar() {
     pintarCabecera();
     rellenarLocales(act.locales);
     pintar();
+    if (!plantilla) cargarPlantilla(); else pintarPlantilla();
   } catch (e) {
     if (e.message !== "sesion") $("#periodo").textContent = "No se han podido cargar los datos. Prueba otra vez.";
   } finally {
@@ -656,15 +666,26 @@ function pintarLocales(act, cmp) {
       <div class="barra"><span style="width:${a.neto / max * 100}%"></span></div></div>`;
   }).join("") : `<div class="vacio">Sin ventas en este periodo.</div>`;
 
-  const eA = {}, eC = {};
-  act.ventas.forEach(v => { const k = `${v.local}|${v.grupo}`; const x = eA[k] ||= { neto: 0, docs: 0 }; x.neto += v.neto; x.docs += v.docs; });
-  cmp.ventas.forEach(v => { const k = `${v.local}|${v.grupo}`; const x = eC[k] ||= { neto: 0, docs: 0 }; x.neto += v.neto; x.docs += v.docs; });
-  const ke = Object.keys(eA).sort((a, b) => eA[b].neto - eA[a].neto);
+  // Por área: ventas de la caja del área y horas de la gente asignada a ella
+  const porArea = d => {
+    const r = {};
+    d.ventas.forEach(v => { const x = r[`${v.local}|${v.area}`] ||= { neto: 0, docs: 0, horas: 0, vh: 0, dias: new Set() }; x.neto += v.neto; x.docs += v.docs; });
+    const conHoras = new Set();
+    d.horas.forEach(h => { const x = r[`${h.local}|${h.area}`] ||= { neto: 0, docs: 0, horas: 0, vh: 0, dias: new Set() }; x.horas += h.horas; conHoras.add(`${h.dia}|${h.local}|${h.area}`); });
+    d.ventas.forEach(v => { if (conHoras.has(`${v.dia}|${v.local}|${v.area}`)) r[`${v.local}|${v.area}`].vh += v.neto; });
+    return r;
+  };
+  const eA = porArea(act), eC = porArea(cmp);
+  const ke = Object.keys(eA).sort((a, b) => a.split("|")[0].localeCompare(b.split("|")[0], "es") || eA[b].neto - eA[a].neto);
   const maxe = Math.max(...ke.map(k => eA[k].neto), 1);
   $("#estabs").innerHTML = ke.length ? ke.map(k => {
-    const [loc, g] = k.split("|"), a = eA[k], c = eC[k] || { neto: 0, docs: 0 };
-    return `<div class="fila"><div class="nom">${g === "cafeterias" ? "Cafetería" : "Tienda"} ${esc(loc)}</div><div class="der num">${eur(a.neto)}</div>
-      <div class="det num"><span>${delta(a.neto, c.neto)}</span><span>${fmtN.format(a.docs)} tickets</span><span>ticket ${fmtEur2.format(a.docs ? a.neto / a.docs : 0)}</span></div>
+    const [loc, area] = k.split("|"), a = eA[k], c = eC[k] || { neto: 0, docs: 0, horas: 0, vh: 0 };
+    const r = a.horas ? a.vh / a.horas : 0, rc = c.horas ? c.vh / c.horas : 0;
+    if (!a.neto && area === "Sin asignar") return `<div class="fila"><div class="nom">${esc(loc)} · <span class="aviso">sin área</span></div><div class="der num">${horasTxt(a.horas)}</div>
+      <div class="det"><span>Horas de personas sin área: asígnalas en Personal para repartirlas.</span></div></div>`;
+    return `<div class="fila"><div class="nom">${esc(loc)} · ${esc(area)}</div><div class="der num">${eur(a.neto)}</div>
+      <div class="det num"><span>${delta(a.neto, c.neto)}</span><span>${fmtN.format(a.docs)} tickets</span><span>ticket ${fmtEur2.format(a.docs ? a.neto / a.docs : 0)}</span>
+      ${a.horas ? `<span>${horasTxt(a.horas)}</span><span><b>${fmtEur2.format(r)}/h</b> ${delta(r, rc)}</span>` : ""}</div>
       <div class="barra"><span style="width:${a.neto / maxe * 100}%"></span></div></div>`;
   }).join("") : `<div class="vacio">Sin ventas en este periodo.</div>`;
 }
@@ -709,7 +730,12 @@ function pintarPersonal(act, cmp) {
   if (obr.length) hA.Obrador = sum(obr, p => p.horas);
   if (obrC.length) hC.Obrador = sum(obrC, p => p.horas);
   const ks = Object.keys(hA).sort((a, b) => hA[b] - hA[a]), max = Math.max(...ks.map(k => hA[k]), 1);
+  const areas = {};
+  act.horas.forEach(h => { const x = areas[h.local] ||= {}; x[h.area] = (x[h.area] || 0) + h.horas; });
+  const repartoTxt = k => Object.entries(areas[k] || {}).sort((a, b) => b[1] - a[1])
+    .map(([a, h]) => `<span${a === "Sin asignar" ? ' class="aviso"' : ""}>${esc(a)} ${horasTxt(h)}</span>`).join("");
   $("#horas-local").innerHTML = ks.length ? ks.map(k => `<div class="fila"><div class="nom">${esc(k)}</div><div class="der num">${horasTxt(hA[k])}</div>
+    <div class="det num">${repartoTxt(k)}</div>
     <div class="det num"><span>${delta(hA[k], hC[k], true)} vs ${horasTxt(hC[k] || 0)}</span>${est[k] ? `<span class="aviso">⚠ ${est[k]} estimado${est[k] > 1 ? "s" : ""}</span>` : ""}</div>
     <div class="barra"><span style="width:${hA[k] / max * 100}%"></span></div></div>`).join("") : `<div class="vacio">Sin fichajes cerrados en este periodo.</div>`;
 
@@ -718,12 +744,49 @@ function pintarPersonal(act, cmp) {
   $("#personal").innerHTML = act.personal.length ? act.personal.map(p => {
     const c = prev.get(p.empleado);
     return `<div class="fila"><div class="nom">${esc(p.empleado)}</div><div class="der num">${horasTxt(p.horas)}</div>
-      <div class="det num"><span>${esc(p.local)}</span><span>${p.dias} día${p.dias === 1 ? "" : "s"}</span>
+      <div class="det num"><span>${esc(p.local)}</span><span class="${p.area === "Sin asignar" ? "aviso" : "chip-area"}">${esc(p.area)}</span><span>${p.dias} día${p.dias === 1 ? "" : "s"}</span>
       <span>${horasTxt(p.dias ? p.horas / p.dias : 0)}/día</span>${c ? `<span>antes ${horasTxt(c.horas)}</span>` : ""}
       ${p.olvidos ? `<span class="aviso">⚠ ${p.olvidos} olvido${p.olvidos > 1 ? "s" : ""} de salida</span>` : ""}</div>
       <div class="barra"><span style="width:${p.horas / maxp * 100}%"></span></div></div>`;
   }).join("") : `<div class="vacio">Sin fichajes.</div>`;
 }
+
+// ---- plantilla: área de cada persona ----
+let plantilla = null;
+async function cargarPlantilla() {
+  try {
+    const r = await api("/api/plantilla");
+    if (r.ok) { plantilla = await r.json(); pintarPlantilla(); }
+  } catch {}
+}
+function pintarPlantilla() {
+  if (!plantilla) return;
+  const pc = x => `${Math.round(x * 100)} %`;
+  const filas = plantilla.personas.filter(p => !estado.local || p.local === estado.local);
+  const sin = filas.filter(p => p.area === "Sin asignar").length;
+  let html = sin ? `<p class="aviso" style="margin:0 0 8px">⚠ ${sin} persona${sin > 1 ? "s" : ""} sin área</p>` : "";
+  let loc = null;
+  for (const p of filas) {
+    if (p.local !== loc) { loc = p.local; html += `<div class="pl-local">${esc(loc)}</div>`; }
+    const total = p.tickets || 0;
+    const rep = Object.entries(p.reparto).sort((a, b) => b[1] - a[1]).map(([a, n]) => `${a} ${pc(n / total)}`).join(" · ");
+    const nota = p.origen === "tpv" ? "según el TPV donde ficha" : total ? `cobra: ${rep} (${fmtN.format(total)} tickets)` : "no cobra tickets";
+    const opciones = [`<option value="">${p.propuesta ? `Propuesta: ${esc(p.propuesta)}` : "Sin asignar"}</option>`]
+      .concat(plantilla.areas.map(a => `<option value="${esc(a)}"${p.manual === a ? " selected" : ""}>${esc(a)}</option>`)).join("");
+    html += `<div class="pl-fila${p.manual ? " manual" : ""}"><div class="nom">${esc(p.empleado.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()))}<small>${esc(nota)}</small></div>
+      ${p.origen === "tpv" && !p.manual ? `<span class="chip-area">${esc(p.area)}</span>` : `<select data-emp="${esc(p.empleado)}" aria-label="Área">${opciones}</select>`}</div>`;
+  }
+  $("#plantilla").innerHTML = html || `<div class="vacio">Sin fichajes en los últimos 60 días.</div>`;
+}
+$("#plantilla").addEventListener("change", async e => {
+  const sel = e.target.closest("select[data-emp]"); if (!sel) return;
+  sel.disabled = true;
+  try {
+    await api("/api/plantilla", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ empleado: sel.dataset.emp, area: sel.value || null }) });
+    await cargarPlantilla(); cargar();
+  } finally { sel.disabled = false; }
+});
 
 function pintarCierres(act) {
   const n = entre(act.desde, act.hasta) + 1;

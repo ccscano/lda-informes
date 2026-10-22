@@ -1,0 +1,207 @@
+"""
+Área de cada trabajador (Cafetería, Tienda, Charcutería, Obrador) para repartir las horas fichadas.
+
+Desde 2025 todos fichan en el TPV de la tienda de su local, así que el fichaje no dice el área.
+Se deduce de dónde cobra cada uno (ventas_empleado) y Carlos la confirma o corrige en la app;
+lo que él elige se guarda en datos/plantilla.json y manda sobre la propuesta.
+
+Nombres: en presencia cada persona es «NOMBRE INICIALES» (iniciales de los dos apellidos, p. ej.
+«ANTONIO NM»). Para la PDA tiene subcódigos «M-NOMBRE APELLIDO» (mañana) y «T-NOMBRE APELLIDO»
+(tarde): «T-ANTONIO NIETO» es «ANTONIO NM». Se unen dentro del mismo local si los nombres coinciden
+y la inicial del primer apellido es la del apellido de la PDA.
+"""
+import datetime as dt
+import json
+import re
+from pathlib import Path
+
+import presencia as base
+import ventas
+
+FICHERO = Path(__file__).resolve().parent / "datos" / "plantilla.json"
+AREAS = ["Cafetería", "Tienda", "Charcutería", "Obrador", "Otra"]
+SIN_AREA = "Sin asignar"
+MIN_TICKETS = 10        # por debajo, no se propone área
+DIAS_PROPUESTA = 90     # ventas de los últimos días de cada persona que se usan para proponer
+
+
+def area_venta(estab):
+    """Área de una caja de venta (ya fusionadas Bollería → Tienda y Sótano → Cafetería)."""
+    e = ventas.FUSIONAR.get(estab.strip(), estab.strip()).lower()
+    if e.startswith("cafeteria"):
+        return "Cafetería"
+    if e.startswith("charcuteria"):
+        return "Charcutería"
+    if e.startswith("tienda"):
+        return "Tienda"
+    return None
+
+
+def area_fichaje(estab):
+    """Área que ya dice el TPV donde se fichó (2023-2024 se fichaba en cada área), o None si es
+    el TPV de la tienda, donde ficha todo el local."""
+    e = estab.strip().lower()
+    if e == "obrador":
+        return "Obrador"
+    if e.startswith("cafeteria") or "sotano" in e:
+        return "Cafetería"
+    if e.startswith("charcuteria"):
+        return "Charcutería"
+    if "bolleria" in e:
+        return "Tienda"
+    return None
+
+
+def local_fichaje(estab):
+    return base.LOCAL_PRESENCIA.get(estab, base.NOMBRE_ESTAB.get(estab, estab.strip()))
+
+
+ABREVIATURAS = {"FCO": "FRANCISCO", "FCO.": "FRANCISCO", "Mª": "MARIA", "Mª.": "MARIA", "JOSÉ": "JOSE"}
+PDA = re.compile(r"^[MT]-")
+PARTICULAS = {"DE", "DEL", "LA", "LAS", "LOS", "Y"}
+
+
+def normal(nombre):
+    return " ".join(ABREVIATURAS.get(t, t) for t in nombre.upper().split())
+
+
+def encaja(pda, real):
+    """¿Es `real` («NOMBRE INICIALES») la persona del nombre de venta `pda` (sin M-/T-)?
+    Admite «NOMBRE APELLIDO», «NOMBRE APELLIDO APELLIDO», «NOMBRE INICIALES» y solo «NOMBRE»."""
+    p = [t for t in pda.split() if t not in PARTICULAS]
+    r = [t for t in real.split() if t not in PARTICULAS]
+    if len(r) < 2:
+        return False
+    nombres_r, iniciales = r[:-1], r[-1]
+    for k in range(1, len(p) + 1):
+        nombres, resto = p[:k], p[k:]
+        if nombres_r[:k] != nombres:
+            continue
+        if not resto:
+            return True                                   # solo el nombre
+        if len(resto) == 1 and resto[0] == iniciales:
+            return True                                   # ya trae las iniciales
+        if iniciales.startswith("".join(t[0] for t in resto)):
+            return True                                   # apellido(s) enteros
+    return False
+
+
+def resolver(nombre_venta, dia, candidatos):
+    """Trabajador de presencia de un nombre de venta, o None si no es claro. `candidatos` es
+    {nombre: días con fichaje} del local; si encajan varios, decide quién fichó ese día."""
+    n = normal(nombre_venta)
+    if n in candidatos:
+        return n
+    encajan = [c for c in candidatos if encaja(PDA.sub("", n), c)]
+    if len(encajan) > 1:
+        encajan = [c for c in encajan if dia in candidatos[c]]
+    return encajan[0] if len(encajan) == 1 else None
+
+
+def leer_manual():
+    try:
+        return json.loads(FICHERO.read_text())
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def guardar_manual(empleado, area):
+    m = leer_manual()
+    if area:
+        m[empleado] = area
+    else:
+        m.pop(empleado, None)
+    FICHERO.write_text(json.dumps(m, ensure_ascii=False, indent=1, sort_keys=True))
+    return m
+
+
+def propuestas(con):
+    """{empleado: {local, propuesta, tickets, reparto: {área: tickets}}} y nombres de venta sin unir."""
+    candidatos = {}   # local → {nombre de presencia: días que fichó}; los subcódigos M-/T- no son personas
+    for estab, emp, dia in con.execute("SELECT DISTINCT estab, empleado, dia FROM fichajes"):
+        nombre = normal(emp)
+        if not PDA.match(nombre):
+            candidatos.setdefault(local_fichaje(estab), {}).setdefault(nombre, set()).add(dia)
+    ultimo = dict(con.execute("SELECT empleado, MAX(dia) FROM ventas_empleado GROUP BY empleado"))
+    res, sin_unir = {}, {}
+    filas = con.execute("SELECT dia, estab, local, empleado, docs FROM ventas_empleado")
+    for dia, estab, local, emp, docs in filas:
+        area = area_venta(estab)
+        if not area:
+            continue
+        # Solo los últimos DIAS_PROPUESTA días de cada nombre de venta: el área actual de la persona
+        fin = dt.date.fromisoformat(ultimo[emp])
+        if dt.date.fromisoformat(dia) < fin - dt.timedelta(days=DIAS_PROPUESTA):
+            continue
+        quien = resolver(emp, dia, candidatos.get(local, {}))
+        if not quien:
+            sin_unir[emp] = sin_unir.get(emp, 0) + docs
+            continue
+        p = res.setdefault(quien, {"local": local, "reparto": {}})
+        p["reparto"][area] = p["reparto"].get(area, 0) + docs
+    for p in res.values():
+        p["tickets"] = sum(p["reparto"].values())
+        mejor = max(p["reparto"], key=p["reparto"].get)
+        p["propuesta"] = mejor if p["tickets"] >= MIN_TICKETS else None
+    return res, sin_unir
+
+
+def asignador(con):
+    """Función (empleado, estab del fichaje) → área, con manual > TPV del área > propuesta."""
+    manual = leer_manual()
+    prop, _ = propuestas(con)
+
+    def area(empleado, estab):
+        nombre = normal(empleado)
+        return (area_fichaje(estab) or manual.get(nombre)
+                or (prop.get(nombre) or {}).get("propuesta") or SIN_AREA)
+    return area
+
+
+def horas_fichajes(filas):
+    """[(fichaje, horas, estimado)]: un olvido de salida se cuenta hasta la última salida normal
+    de ese local ese día (o 8 h), como en el € por hora de Telegram."""
+    ultima = {}
+    for f in filas:
+        if f["fin"] and not base.es_olvido(f):
+            k = (f["dia"], local_fichaje(f["estab"]))
+            ultima[k] = max(ultima.get(k, ""), f["fin"])
+    res = []
+    for f in filas:
+        if base.es_olvido(f):
+            fin = ultima.get((f["dia"], local_fichaje(f["estab"])))
+            if fin and fin > f["inicio"]:
+                h = (dt.datetime.fromisoformat(fin) - dt.datetime.fromisoformat(f["inicio"])).total_seconds() / 3600
+            else:
+                h = 8.0
+            res.append((f, min(h, base.MAX_HORAS), True))
+        else:
+            res.append((f, f["horas"], False))
+    return res
+
+
+def resumen(con, desde):
+    """Para la pantalla de plantilla: cada persona que ha fichado desde `desde` con su local,
+    área efectiva y de dónde sale (manual, TPV del área o propuesta por ventas)."""
+    manual = leer_manual()
+    prop, sin_unir = propuestas(con)
+    gente = {}
+    for estab, emp, n in con.execute(
+            "SELECT estab, empleado, COUNT(*) FROM fichajes WHERE dia >= ? GROUP BY estab, empleado", (desde,)):
+        nombre = normal(emp)
+        if PDA.match(nombre) or emp in base.NO_PLANTILLA:
+            continue
+        g = gente.setdefault(nombre, {"empleado": nombre, "locales": {}, "tpv": None})
+        loc = local_fichaje(estab)
+        g["locales"][loc] = g["locales"].get(loc, 0) + n
+        g["tpv"] = g["tpv"] or area_fichaje(estab)
+    res = []
+    for nombre, g in gente.items():
+        p = prop.get(nombre) or {}
+        origen, area = ("manual", manual[nombre]) if nombre in manual else \
+            ("tpv", g["tpv"]) if g["tpv"] else ("propuesta", p.get("propuesta")) if p.get("propuesta") else (None, SIN_AREA)
+        res.append({"empleado": nombre, "local": max(g["locales"], key=g["locales"].get), "area": area,
+                    "origen": origen, "propuesta": p.get("propuesta"), "tickets": p.get("tickets", 0),
+                    "reparto": p.get("reparto", {}), "manual": manual.get(nombre)})
+    res.sort(key=lambda r: (r["local"], r["area"] != SIN_AREA, r["empleado"]))
+    return {"personas": res, "areas": AREAS, "sin_unir": sorted(sin_unir.items(), key=lambda x: -x[1])[:15]}

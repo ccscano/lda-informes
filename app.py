@@ -28,6 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import historico
+import plantilla
 import presencia as base
 
 DIR = Path(__file__).resolve().parent
@@ -39,7 +40,9 @@ CODIGO_VALIDEZ = 600
 MAX_INTENTOS = 5
 # Establecimientos de HiOffice que no son puntos de venta: fuera de ventas, productos y cierres
 NO_SON_LOCALES = ("Obrador", "Oficina Central", "Opera Prima")
-MAX_DIAS_CIERRES = 62          # el detalle de cierres solo se manda en periodos cortos
+MAX_DIAS_CIERRES = 62
+# Área de la caja que vende (Bollería ya va en Tienda y Sótano en Cafetería)
+AREA = "CASE WHEN estab LIKE 'Cafeteria%' THEN 'Cafetería' WHEN estab LIKE 'Charcuteria%' THEN 'Charcutería' ELSE 'Tienda' END"          # el detalle de cierres solo se manda en periodos cortos
 DIRECTO_CADA = 60              # segundos mínimos entre dos lecturas en directo de hoy en HiOffice
 TOKEN_VIDA = 1200              # se rehace el login de HiOffice cada 20 minutos
 TIPOS = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
@@ -131,15 +134,15 @@ def datos(desde, hasta, local=None, corte=None):
     filtro, args = (f"AND local = ? {fuera}", [local, *NO_SON_LOCALES]) if local else (fuera, [*NO_SON_LOCALES])
 
     ventas = [dict(r) for r in con.execute(
-        f"SELECT dia, local, grupo, SUM(neto) neto, SUM(docs) docs FROM ventas "
-        f"WHERE dia BETWEEN ? AND ? {filtro} GROUP BY dia, local, grupo ORDER BY dia", [d0, d1, *args])]
+        f"SELECT dia, local, grupo, {AREA} area, SUM(neto) neto, SUM(docs) docs FROM ventas "
+        f"WHERE dia BETWEEN ? AND ? {filtro} GROUP BY dia, local, grupo, area ORDER BY dia", [d0, d1, *args])]
     proporcion = {}   # local → parte de la venta del último día hecha antes del corte
     if cortar:
         h, frac = corte.hour, corte.minute / 60
         hasta_corte = [dict(r, dia=d1) for r in con.execute(
-            f"SELECT local, grupo, SUM(CASE WHEN hora < ? THEN neto WHEN hora = ? THEN neto * ? ELSE 0 END) neto, "
+            f"SELECT local, grupo, {AREA} area, SUM(CASE WHEN hora < ? THEN neto WHEN hora = ? THEN neto * ? ELSE 0 END) neto, "
             f"SUM(CASE WHEN hora < ? THEN docs WHEN hora = ? THEN docs * ? ELSE 0 END) docs "
-            f"FROM ventas_hora WHERE dia = ? {filtro} GROUP BY local, grupo", [h, h, frac, h, h, frac, d1, *args])]
+            f"FROM ventas_hora WHERE dia = ? {filtro} GROUP BY local, grupo, area", [h, h, frac, h, h, frac, d1, *args])]
         completo = {}
         for v in ventas:
             if v["dia"] == d1:
@@ -154,14 +157,18 @@ def datos(desde, hasta, local=None, corte=None):
     fin_fich = (hasta - dt.timedelta(days=1)).isoformat() if corte is not None else d1
     fich = [dict(r) for r in con.execute(
         "SELECT * FROM fichajes WHERE dia BETWEEN ? AND ? ORDER BY inicio", [d0, fin_fich])]
-    horas = []
-    por_dia = {}
-    for f in fich:
-        por_dia.setdefault(f["dia"], []).append(f)
-    for dia, filas in por_dia.items():
-        for loc, (h, est) in base.horas_por_local(filas, dt.date.fromisoformat(dia)).items():
-            if not local or loc == local:
-                horas.append({"dia": dia, "local": loc, "horas": round(h, 2), "estimados": est})
+    # Horas por día, local y área de cada persona (plantilla.py); fuera los que no son puntos de venta
+    area_de = plantilla.asignador(con)
+    suma = {}
+    for f, h, estimado in plantilla.horas_fichajes(fich):
+        loc = plantilla.local_fichaje(f["estab"])
+        if loc in NO_SON_LOCALES or f["empleado"] in base.NO_PLANTILLA or (local and loc != local):
+            continue
+        x = suma.setdefault((f["dia"], loc, area_de(f["empleado"], f["estab"])), [0.0, 0])
+        x[0] += h
+        x[1] += estimado
+    horas = [{"dia": d, "local": l, "area": a, "horas": round(h, 2), "estimados": e}
+             for (d, l, a), (h, e) in suma.items()]
 
     personal = {}
     for f in fich:
@@ -169,7 +176,9 @@ def datos(desde, hasta, local=None, corte=None):
         if local and loc != local:
             continue
         p = personal.setdefault(f["empleado"], {"empleado": f["empleado"].title(), "horas": 0, "dias": set(),
-                                                "olvidos": 0, "locales": {}})
+                                                "olvidos": 0, "locales": {}, "areas": {}})
+        a = area_de(f["empleado"], f["estab"])
+        p["areas"][a] = p["areas"].get(a, 0) + 1
         if base.es_olvido(f):
             p["olvidos"] += 1
         else:
@@ -177,7 +186,8 @@ def datos(desde, hasta, local=None, corte=None):
         p["dias"].add(f["dia"])
         p["locales"][loc] = p["locales"].get(loc, 0) + 1
     personal = sorted(({"empleado": p["empleado"], "horas": round(p["horas"], 2), "dias": len(p["dias"]),
-                        "olvidos": p["olvidos"], "local": max(p["locales"], key=p["locales"].get)}
+                        "olvidos": p["olvidos"], "local": max(p["locales"], key=p["locales"].get),
+                        "area": max(p["areas"], key=p["areas"].get)}
                        for p in personal.values()), key=lambda p: -p["horas"])
 
     if cortar:
@@ -292,6 +302,12 @@ class Manejador(http.server.BaseHTTPRequestHandler):
             res = datos(desde, hasta, (q.get("local") or [None])[0], corte)
             res["directo"] = en_directo
             return self.responder(200, res)
+        if url.path == "/api/plantilla":
+            if not self.sesion_valida():
+                return self.responder(401, {"error": "sesion"})
+            with sqlite3.connect(f"file:{historico.DB}?mode=ro", uri=True) as con:
+                desde = (dt.date.today() - dt.timedelta(days=60)).isoformat()
+                return self.responder(200, plantilla.resumen(con, desde))
         if url.path == "/api/salir":
             return self.responder(200, {"ok": True},
                                   cabeceras=[("Set-Cookie", "lda=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict")])
@@ -314,6 +330,14 @@ class Manejador(http.server.BaseHTTPRequestHandler):
                 print("Telegram:", e, flush=True)
                 return self.responder(502, {"error": "telegram"})
             return self.responder(200, {"ok": True, "enviado": enviado})
+        if self.path == "/api/plantilla":
+            if not self.sesion_valida():
+                return self.responder(401, {"error": "sesion"})
+            emp, area = str(cuerpo.get("empleado", "")).strip(), cuerpo.get("area")
+            if not emp or (area is not None and area not in plantilla.AREAS):
+                return self.responder(400, {"error": "datos"})
+            plantilla.guardar_manual(plantilla.normal(emp), area)
+            return self.responder(200, {"ok": True})
         if self.path == "/api/entrar":
             if not comprobar_codigo(cuerpo.get("codigo", "")):
                 return self.responder(403, {"error": "codigo"})
