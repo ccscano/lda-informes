@@ -20,6 +20,7 @@ import datetime as dt
 import sqlite3
 import sys
 import time
+import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -83,16 +84,25 @@ def marcar(con, tabla, dia):
                 (tabla, dia.isoformat(), dt.datetime.now().isoformat(timespec="seconds")))
 
 
-def reintentar(fn, *args):
-    """HiOffice da 500 de vez en cuando: tres intentos antes de rendirse con ese día."""
+# HiOffice solo mantiene una sesión por usuario: si otro proceso (la app, un informe) hace login,
+# el token de este deja de valer (401) y hay que volver a entrar. El token nuevo se guarda aquí.
+sesion = {"token": None}
+
+
+def reintentar(fn, token, *args):
+    """Llama a fn(token, *args). HiOffice da 500 de vez en cuando y 401 si otro proceso ha
+    hecho login: tres intentos (con login nuevo tras un 401) antes de rendirse con ese día."""
     for intento in range(3):
         try:
-            return fn(*args)
+            return fn(sesion["token"] or token, *args)
         except Exception as e:
             if intento == 2:
                 raise
             print(f"  {fn.__name__} falló ({str(e)[:80]}); reintento", file=sys.stderr, flush=True)
-            time.sleep(10)
+            if isinstance(e, urllib.error.HTTPError) and e.code == 401:
+                sesion["token"] = base.login(base.cargar_env())
+            else:
+                time.sleep(10)
 
 
 def cargar_ventas(con, token, desde, hasta):
