@@ -4,3 +4,4 @@ avisados.json
 bot_offset.json
 __pycache__/
 *.pyc
+datos/

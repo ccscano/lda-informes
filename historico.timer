@@ -1,0 +1,10 @@
+[Unit]
+Description=Histórico para la app: cada hora de 9:00 a 23:00 y a las 04:30
+
+[Timer]
+OnCalendar=*-*-* 09..23:20:00
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

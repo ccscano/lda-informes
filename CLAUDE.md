@@ -22,6 +22,19 @@ Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladul
 `bot_lda.py` (servicio permanente) responde a /ventas /productos /cierres /presencia
 /semana /semanal /mensual [fecha] en privado a los ids de `TELEGRAM_USUARIOS` y en el canal.
 
+## App (panel web con icono en el móvil)
+- `historico.py` guarda en `datos/historico.db` (SQLite) ventas por establecimiento, artículos,
+  fichajes y cierres, por día, reutilizando las consultas de los informes. Timer `historico.timer`:
+  cada hora de 9:20 a 23:20 y a las 04:30 (refresca 3 días; fichajes 21). Carga inicial o
+  rehacer un rango: `python3 historico.py --desde 2023-01-01 [--hasta …] [--solo ventas,productos]`.
+  Hay ventas en HiOffice desde 2023.
+- `app.py` (servicio `app.service`, 127.0.0.1:8765) sirve `app/` (PWA: index.html, manifest,
+  sw.js, iconos) y `/api/datos?desde&hasta[&local]`. Solo lee el histórico, no llama a HiOffice.
+- Acceso: código de 6 cifras que el bot manda por Telegram a `TELEGRAM_USUARIOS`; la sesión
+  (cookie de un año) se guarda en `datos/sesiones.json`.
+- Tras cambiar `app.py`: `systemctl --user restart app.service`. Si se cambia algo de `app/`,
+  subir la versión de `CACHE` en `app/sw.js`.
+
 ## Cómo se gestiona (systemd de usuario, sin sudo)
 ```bash
 systemctl --user list-timers

@@ -1,0 +1,10 @@
+[Unit]
+Description=Histórico de HiOffice para la app (SQLite)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=TZ=Europe/Madrid
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/home/lda/presencia
+ExecStart=/usr/bin/python3 /home/lda/presencia/historico.py

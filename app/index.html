@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>La Dulce Alianza</title>
+<meta name="theme-color" content="#faf8f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161513" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Dulce Alianza">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icono-180.png">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #faf8f5; --surface: #ffffff; --surface-2: #f3f0eb; --line: #e6e1d9;
+  --text: #1d1b18; --text-2: #5c5750; --muted: #8a847b;
+  --accent: #9a5b2e; --accent-ink: #ffffff; --accent-soft: #f4e9df;
+  --series-1: #2a78d6; --series-comp: #b9b4ab;
+  --good: #0a7d33; --bad: #c4302b; --warn: #a86400;
+  --shadow: 0 1px 2px rgba(40,30,20,.06), 0 2px 8px rgba(40,30,20,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #161513; --surface: #1f1e1b; --surface-2: #2a2825; --line: #353330;
+    --text: #f4f2ee; --text-2: #c3bfb7; --muted: #8f8a82;
+    --accent: #d9965f; --accent-ink: #1d1208; --accent-soft: #3a2c20;
+    --series-1: #3987e5; --series-comp: #5d5a55;
+    --good: #45c26f; --bad: #f0706b; --warn: #e0a040;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #161513; --surface: #1f1e1b; --surface-2: #2a2825; --line: #353330;
+  --text: #f4f2ee; --text-2: #c3bfb7; --muted: #8f8a82;
+  --accent: #d9965f; --accent-ink: #1d1208; --accent-soft: #3a2c20;
+  --series-1: #3987e5; --series-comp: #5d5a55;
+  --good: #45c26f; --bad: #f0706b; --warn: #e0a040;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+button, input, select { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+
+header {
+  background: var(--bg);
+  padding: calc(10px + env(safe-area-inset-top)) 16px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.top { display: flex; align-items: center; gap: 10px; }
+.top h1 { font-size: 18px; margin: 0; flex: 1; letter-spacing: -.01em; }
+.top small { color: var(--muted); font-size: 12px; }
+.icon-btn {
+  width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); display: grid; place-items: center; cursor: pointer;
+}
+.chips { display: flex; gap: 6px; overflow-x: auto; margin: 10px -16px 0; padding: 0 16px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); font-size: 14px; cursor: pointer; white-space: nowrap;
+}
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.filtros { display: flex; gap: 8px; margin-top: 8px; }
+.filtros select {
+  flex: 1; min-width: 0; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); font-size: 14px;
+}
+.rango { display: none; gap: 8px; margin-top: 8px; }
+.rango.visible { display: flex; }
+.rango input { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+.periodo { margin-top: 8px; font-size: 13px; color: var(--text-2); }
+
+main { padding: 12px 16px 24px; max-width: 900px; margin: 0 auto; }
+.vista { display: none; }
+.vista.activa { display: block; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow);
+}
+.card h2 { font-size: 15px; margin: 0 0 2px; }
+.card .sub { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+@media (min-width: 640px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: var(--shadow); }
+.kpi .lbl { font-size: 12px; color: var(--text-2); }
+.kpi .val { font-size: 22px; font-weight: 650; margin-top: 2px; letter-spacing: -.02em; }
+.kpi .cmp { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.delta { font-weight: 600; white-space: nowrap; }
+.delta.up { color: var(--good); }
+.delta.down { color: var(--bad); }
+.delta.flat { color: var(--muted); }
+
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart .grid line { stroke: var(--line); stroke-width: 1; }
+.chart text { fill: var(--muted); font-size: 11px; }
+.chart .bar { fill: var(--series-1); }
+.chart .bar.dim { opacity: .35; }
+.chart .comp { fill: none; stroke: var(--series-comp); stroke-width: 2; }
+.chart .compdot { fill: var(--series-comp); }
+.chart .hit { fill: transparent; cursor: pointer; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); margin-bottom: 8px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.tip {
+  position: absolute; pointer-events: none; background: var(--text); color: var(--bg);
+  padding: 7px 9px; border-radius: 8px; font-size: 12px; line-height: 1.35; white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 8px)); opacity: 0; transition: opacity .1s; z-index: 2;
+}
+.tip.on { opacity: 1; }
+.tip b { font-weight: 650; }
+
+.filas { display: flex; flex-direction: column; }
+.fila { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.fila:first-child { border-top: 0; padding-top: 0; }
+.fila .nom { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fila .der { text-align: right; font-weight: 600; }
+.fila .det { grid-column: 1 / -1; font-size: 12px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.fila .barra { grid-column: 1 / -1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.fila .barra span { display: block; height: 100%; background: var(--series-1); border-radius: 3px; }
+.rank { color: var(--muted); font-weight: 500; margin-right: 6px; }
+.aviso { color: var(--warn); font-weight: 600; }
+.buscar { width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); margin-bottom: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+.seg button { border: 0; background: var(--surface); padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.vacio { color: var(--muted); text-align: center; padding: 24px 8px; }
+.dia-cab { display: flex; justify-content: space-between; font-weight: 650; margin: 4px 0 6px; }
+.tabla-mas { background: none; border: 0; color: var(--accent); font-weight: 600; padding: 8px 0 0; cursor: pointer; }
+
+nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; display: flex;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+nav button {
+  flex: 1; border: 0; background: none; padding: 8px 0 7px; font-size: 11px; color: var(--muted);
+  display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer;
+}
+nav button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
+
+#login { display: none; min-height: 100vh; padding: 40px 24px; max-width: 380px; margin: 0 auto; flex-direction: column; justify-content: center; gap: 14px; }
+#login.visible { display: flex; }
+#login h1 { margin: 0; font-size: 24px; }
+#login p { margin: 0; color: var(--text-2); }
+#login input { padding: 12px; font-size: 22px; letter-spacing: .3em; text-align: center; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.btn { padding: 12px; border-radius: 12px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 650; cursor: pointer; }
+.btn.sec { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
+.msg { font-size: 14px; color: var(--text-2); min-height: 20px; }
+.cargando { opacity: .55; transition: opacity .2s; }
+</style>
+</head>
+<body>
+
+<section id="login" aria-labelledby="login-t">
+  <img src="icono.svg" width="64" height="64" alt="">
+  <h1 id="login-t">La Dulce Alianza</h1>
+  <p>Te mando un código por Telegram para entrar. Solo hace falta una vez en este dispositivo.</p>
+  <button class="btn" id="pedir">Enviar código por Telegram</button>
+  <input id="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="······" aria-label="Código">
+  <button class="btn sec" id="entrar">Entrar</button>
+  <div class="msg" id="login-msg" role="status"></div>
+</section>
+
+<div id="app" hidden>
+<header>
+  <div class="top">
+    <h1>La Dulce Alianza</h1>
+    <small id="actualizado"></small>
+    <button class="icon-btn" id="recargar" aria-label="Actualizar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+    </button>
+  </div>
+  <div class="chips" id="presets" role="group" aria-label="Periodo"></div>
+  <div class="rango" id="rango">
+    <input type="date" id="r-desde" aria-label="Desde">
+    <input type="date" id="r-hasta" aria-label="Hasta">
+  </div>
+  <div class="filtros">
+    <select id="local" aria-label="Local"><option value="">Todos los locales</option></select>
+    <select id="comparar" aria-label="Comparar con">
+      <option value="anterior">vs periodo anterior</option>
+      <option value="anio">vs año anterior</option>
+    </select>
+  </div>
+  <div class="periodo" id="periodo"></div>
+</header>
+
+<main id="main">
+  <section class="vista activa" id="v-resumen">
+    <div class="kpis" id="kpis"></div>
+    <div class="card"><h2>Ventas</h2><p class="sub" id="ventas-sub"></p><div class="legend" id="ventas-ley"></div><div class="chart" id="ch-ventas"></div></div>
+    <div class="card" id="card-eurh"><h2>€ por hora trabajada</h2><p class="sub">Ventas de tiendas y cafeterías entre las horas fichadas en cada local. El Obrador no cuenta.</p><div class="chart" id="ch-eurh"></div></div>
+    <div class="card" id="card-semana"><h2>Venta media por día de la semana</h2><p class="sub" id="semana-sub"></p><div class="chart" id="ch-semana"></div></div>
+  </section>
+
+  <section class="vista" id="v-locales">
+    <div class="card"><h2>Por local</h2><p class="sub">Cafetería + tienda (+ charcutería en Paseo). Entre paréntesis, la variación frente a la comparación.</p><div class="filas" id="locales"></div></div>
+    <div class="card"><h2>Por establecimiento</h2><p class="sub">Cada TPV por separado.</p><div class="filas" id="estabs"></div></div>
+  </section>
+
+  <section class="vista" id="v-productos">
+    <div class="card">
+      <h2>Productos</h2><p class="sub" id="prod-sub"></p>
+      <input class="buscar" id="buscar" type="search" placeholder="Buscar producto">
+      <div class="seg" role="group" aria-label="Ordenar por">
+        <button data-orden="venta" aria-pressed="true">Por venta</button>
+        <button data-orden="uds" aria-pressed="false">Por unidades</button>
+        <button data-orden="sube" aria-pressed="false">Suben</button>
+        <button data-orden="baja" aria-pressed="false">Bajan</button>
+      </div>
+      <div class="filas" id="productos"></div>
+      <button class="tabla-mas" id="prod-mas" hidden>Ver más</button>
+    </div>
+  </section>
+
+  <section class="vista" id="v-personal">
+    <div class="card"><h2>Horas por local</h2><p class="sub">Fichajes cerrados. Los olvidos de salida se estiman hasta la última salida del local ese día.</p><div class="filas" id="horas-local"></div></div>
+    <div class="card"><h2>Personas</h2><p class="sub">Horas de fichajes completos. Los olvidos de salida se cuentan aparte.</p><div class="filas" id="personal"></div></div>
+  </section>
+
+  <section class="vista" id="v-cajas">
+    <div class="card"><h2>Cierres de caja</h2><p class="sub">Arqueos Z cerrados. Nadie declara efectivo, así que el descuadre no se muestra salvo que haya declarado.</p><div id="cierres"></div></div>
+  </section>
+</main>
+
+<nav aria-label="Secciones">
+  <button data-vista="resumen" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Resumen</button>
+  <button data-vista="locales"><svg viewBox="0 0 24 24"><path d="M3 10l1.5-5h15L21 10M4 10v10h16V10M3 10h18M9 20v-6h6v6"/></svg>Locales</button>
+  <button data-vista="productos"><svg viewBox="0 0 24 24"><path d="M5 11h14l-1.5 9h-11zM8 11V8a4 4 0 0 1 8 0v3"/></svg>Productos</button>
+  <button data-vista="personal"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Personal</button>
+  <button data-vista="cajas"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Cajas</button>
+</nav>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const DIAS_LARGO = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const fmtEur = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const fmtEur2 = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtN = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
+const fmtN1 = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 });
+const eur = x => fmtEur.format(x || 0);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const horasTxt = h => { const m = Math.round((h || 0) * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`; };
+const sum = (a, f) => a.reduce((s, x) => s + (f ? f(x) : x), 0);
+
+// ---- fechas (siempre en hora local, como cadenas AAAA-MM-DD) ----
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const deIso = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const masDias = (s, n) => { const d = deIso(s); d.setDate(d.getDate() + n); return iso(d); };
+const entre = (a, b) => Math.round((deIso(b) - deIso(a)) / 864e5);
+const hoy = () => iso(new Date());
+const fechaCorta = s => { const d = deIso(s); return `${d.getDate()} ${MESES[d.getMonth()]}`; };
+const fechaLarga = s => { const d = deIso(s); return `${DIAS_LARGO[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`; };
+const menosAnio = s => { const d = deIso(s); d.setFullYear(d.getFullYear() - 1); return iso(d); };
+
+const PRESETS = [
+  ["hoy", "Hoy"], ["ayer", "Ayer"], ["7d", "7 días"], ["mes", "Este mes"],
+  ["mesant", "Mes pasado"], ["30d", "30 días"], ["anio", "Este año"], ["12m", "12 meses"], ["rango", "Fechas…"],
+];
+
+function rangoPreset(p) {
+  const h = hoy(), d = deIso(h);
+  const primero = (y, m) => iso(new Date(y, m, 1)), ultimo = (y, m) => iso(new Date(y, m + 1, 0));
+  switch (p) {
+    case "hoy": return [h, h];
+    case "ayer": return [masDias(h, -1), masDias(h, -1)];
+    case "7d": return [masDias(h, -6), h];
+    case "30d": return [masDias(h, -29), h];
+    case "mes": return [primero(d.getFullYear(), d.getMonth()), h];
+    case "mesant": return [primero(d.getFullYear(), d.getMonth() - 1), ultimo(d.getFullYear(), d.getMonth() - 1)];
+    case "anio": return [`${d.getFullYear()}-01-01`, h];
+    case "12m": return [masDias(menosAnio(h), 1), h];
+    default: return [estado.desde, estado.hasta];
+  }
+}
+
+// Comparación: día suelto → mismo día de la semana anterior; meses y años → calendario;
+// el resto, el mismo número de días justo antes. "Año anterior" usa 364 días (mismo día de la semana)
+// salvo en meses y años, que van por calendario.
+function rangoComparacion(desde, hasta, preset, modo) {
+  const n = entre(desde, hasta) + 1;
+  const calendario = ["mes", "mesant", "anio"].includes(preset);
+  if (modo === "anio") {
+    return calendario || n > 120 ? [menosAnio(desde), menosAnio(hasta)] : [masDias(desde, -364), masDias(hasta, -364)];
+  }
+  if (n === 1) return [masDias(desde, -7), masDias(hasta, -7)];
+  if (preset === "mes" || preset === "mesant") {
+    const a = deIso(desde), b = deIso(hasta);
+    const ini = new Date(a.getFullYear(), a.getMonth() - 1, 1);
+    const finMes = new Date(a.getFullYear(), a.getMonth(), 0);
+    const fin = preset === "mesant" ? finMes : new Date(ini.getFullYear(), ini.getMonth(), Math.min(b.getDate(), finMes.getDate()));
+    return [iso(ini), iso(fin)];
+  }
+  if (preset === "anio") return [menosAnio(desde), menosAnio(hasta)];
+  return [masDias(desde, -n), masDias(desde, -1)];
+}
+
+// ---- estado ----
+const guardado = (() => { try { return JSON.parse(localStorage.getItem("lda-estado") || "{}"); } catch { return {}; } })();
+const estado = {
+  preset: guardado.preset || "7d", local: guardado.local || "", comparar: guardado.comparar || "anterior",
+  vista: guardado.vista || "resumen", desde: guardado.desde || masDias(hoy(), -6), hasta: guardado.hasta || hoy(),
+  orden: "venta", prodLimite: 30, act: null, cmp: null,
+};
+function persistir() {
+  try { localStorage.setItem("lda-estado", JSON.stringify({ preset: estado.preset, local: estado.local, comparar: estado.comparar, vista: estado.vista, desde: estado.desde, hasta: estado.hasta })); } catch {}
+}
+
+// ---- API ----
+async function api(url, opts) {
+  const r = await fetch(url, { credentials: "same-origin", ...opts });
+  if (r.status === 401) { mostrarLogin(); throw new Error("sesion"); }
+  return r;
+}
+async function pedirDatos(desde, hasta) {
+  const q = new URLSearchParams({ desde, hasta });
+  if (estado.local) q.set("local", estado.local);
+  const r = await api(`/api/datos?${q}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+let peticion = 0;
+async function cargar() {
+  if (estado.preset !== "rango") [estado.desde, estado.hasta] = rangoPreset(estado.preset);
+  const [cd, ch] = rangoComparacion(estado.desde, estado.hasta, estado.preset, estado.comparar);
+  estado.cdesde = cd; estado.chasta = ch;
+  persistir();
+  pintarCabecera();
+  const id = ++peticion;
+  $("#main").classList.add("cargando");
+  try {
+    const [act, cmp] = await Promise.all([pedirDatos(estado.desde, estado.hasta), pedirDatos(cd, ch)]);
+    if (id !== peticion) return;
+    estado.act = act; estado.cmp = cmp; estado.ultima = Date.now();
+    rellenarLocales(act.locales);
+    pintar();
+  } catch (e) {
+    if (e.message !== "sesion") $("#periodo").textContent = "No se han podido cargar los datos. Prueba otra vez.";
+  } finally {
+    if (id === peticion) $("#main").classList.remove("cargando");
+  }
+}
+
+// ---- login ----
+function mostrarLogin() { $("#app").hidden = true; $("#login").classList.add("visible"); }
+$("#pedir").onclick = async () => {
+  $("#login-msg").textContent = "Enviando…";
+  try {
+    const r = await fetch("/api/codigo", { method: "POST" });
+    const j = await r.json();
+    $("#login-msg").textContent = !r.ok ? "No se ha podido enviar. Prueba en un momento."
+      : j.enviado ? "Código enviado. Míralo en Telegram." : "Ya te lo he mandado hace un momento: mira Telegram.";
+    $("#codigo").focus();
+  } catch { $("#login-msg").textContent = "Sin conexión con el servidor."; }
+};
+async function entrar() {
+  const codigo = $("#codigo").value.replace(/\D/g, "");
+  if (codigo.length !== 6) { $("#login-msg").textContent = "El código tiene 6 cifras."; return; }
+  const r = await fetch("/api/entrar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codigo }) });
+  if (!r.ok) { $("#login-msg").textContent = "Código incorrecto o caducado. Pide otro."; return; }
+  $("#login").classList.remove("visible"); $("#app").hidden = false; $("#codigo").value = "";
+  cargar();
+}
+$("#entrar").onclick = entrar;
+$("#codigo").addEventListener("input", e => { if (e.target.value.replace(/\D/g, "").length === 6) entrar(); });
+
+// ---- controles ----
+function pintarControles() {
+  $("#presets").innerHTML = PRESETS.map(([k, t]) => `<button class="chip" data-p="${k}" aria-pressed="${estado.preset === k}">${t}</button>`).join("");
+  $("#rango").classList.toggle("visible", estado.preset === "rango");
+  $("#r-desde").value = estado.desde; $("#r-hasta").value = estado.hasta; $("#r-hasta").max = hoy();
+  $("#comparar").value = estado.comparar;
+  document.querySelectorAll("nav button").forEach(b => b.dataset.vista === estado.vista ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+  document.querySelectorAll(".vista").forEach(v => v.classList.toggle("activa", v.id === `v-${estado.vista}`));
+}
+$("#presets").onclick = e => {
+  const b = e.target.closest("[data-p]"); if (!b) return;
+  estado.preset = b.dataset.p; pintarControles();
+  if (estado.preset !== "rango") cargar();
+};
+const cambioRango = () => {
+  const a = $("#r-desde").value, b = $("#r-hasta").value;
+  if (a && b && a <= b) { estado.desde = a; estado.hasta = b; cargar(); }
+};
+$("#r-desde").onchange = cambioRango; $("#r-hasta").onchange = cambioRango;
+$("#local").onchange = e => { estado.local = e.target.value; cargar(); };
+$("#comparar").onchange = e => { estado.comparar = e.target.value; cargar(); };
+$("#recargar").onclick = () => cargar();
+document.querySelector("nav").onclick = e => {
+  const b = e.target.closest("[data-vista]"); if (!b) return;
+  estado.vista = b.dataset.vista; persistir(); pintarControles(); window.scrollTo(0, 0);
+};
+document.querySelector(".seg").onclick = e => {
+  const b = e.target.closest("[data-orden]"); if (!b) return;
+  estado.orden = b.dataset.orden; estado.prodLimite = 30;
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  pintarProductos();
+};
+$("#buscar").oninput = () => { estado.prodLimite = 30; pintarProductos(); };
+$("#prod-mas").onclick = () => { estado.prodLimite += 50; pintarProductos(); };
+
+function rellenarLocales(locales) {
+  const sel = $("#local");
+  const actuales = [...sel.options].slice(1).map(o => o.value).join("|");
+  const todos = [...new Set([...locales, "Obrador"])].sort((a, b) => a.localeCompare(b, "es"));
+  if (actuales !== todos.join("|")) {
+    sel.innerHTML = `<option value="">Todos los locales</option>` + todos.map(l => `<option>${esc(l)}</option>`).join("");
+  }
+  sel.value = estado.local;
+}
+
+function textoRango(a, b) {
+  return a === b ? fechaLarga(a) : `${fechaCorta(a)} – ${fechaCorta(b)} ${deIso(b).getFullYear()}`;
+}
+function pintarCabecera() {
+  $("#periodo").innerHTML = `${esc(textoRango(estado.desde, estado.hasta))}${estado.hasta === hoy() ? " (hasta ahora)" : ""}`
+    + ` · <span style="color:var(--muted)">comparado con ${esc(textoRango(estado.cdesde, estado.chasta))}</span>`;
+}
+
+// ---- cálculos ----
+function totales(d) {
+  const neto = sum(d.ventas, v => v.neto), docs = sum(d.ventas, v => v.docs);
+  const vTiendas = sum(d.ventas.filter(v => v.local !== "Obrador"), v => v.neto);
+  const locConHoras = new Set(d.horas.map(h => h.local));
+  const vConHoras = sum(d.ventas.filter(v => locConHoras.has(v.local)), v => v.neto);
+  const horas = sum(d.horas, h => h.horas);
+  const horasTodas = sum(d.personal, p => p.horas);
+  return { neto, docs, ticket: docs ? neto / docs : 0, horas, eurh: horas ? vConHoras / horas : 0,
+           olvidos: sum(d.personal, p => p.olvidos), vTiendas, horasTodas };
+}
+function delta(a, b, invertido) {
+  if (!b) return `<span class="delta flat">—</span>`;
+  const v = (a - b) / Math.abs(b) * 100;
+  if (Math.abs(v) < 0.5) return `<span class="delta flat">= 0 %</span>`;
+  const bueno = invertido ? v < 0 : v > 0;
+  return `<span class="delta ${bueno ? "up" : "down"}">${v > 0 ? "▲" : "▼"} ${fmtN1.format(Math.abs(v))} %</span>`;
+}
+
+// Agrupación por día, semana (lunes) o mes según la longitud del periodo
+function granularidad(n) { return n <= 45 ? "dia" : n <= 200 ? "semana" : "mes"; }
+function claveDe(s, g) {
+  if (g === "dia") return s;
+  const d = deIso(s);
+  if (g === "mes") return iso(new Date(d.getFullYear(), d.getMonth(), 1));
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(d);
+}
+function cubos(desde, hasta, g) {
+  const res = [], vistos = new Set();
+  for (let s = desde; s <= hasta; s = masDias(s, 1)) {
+    const k = claveDe(s, g);
+    if (!vistos.has(k)) { vistos.add(k); res.push(k); }
+  }
+  return res;
+}
+function etiquetaCubo(k, g, corta) {
+  const d = deIso(k);
+  if (g === "mes") return corta ? MESES[d.getMonth()] : `${MESES[d.getMonth()]} ${d.getFullYear()}`;
+  if (g === "semana") return corta ? `${d.getDate()}/${d.getMonth() + 1}` : `semana del ${fechaCorta(k)}`;
+  return corta ? `${d.getDate()}` : fechaLarga(k);
+}
+function serie(d, g, valor) {
+  const ks = cubos(d.desde, d.hasta, g), m = new Map(ks.map(k => [k, 0]));
+  for (const v of d.ventas) { const k = claveDe(v.dia, g); if (m.has(k)) m.set(k, m.get(k) + valor(v)); }
+  return ks.map(k => ({ k, v: m.get(k) }));
+}
+
+// ---- gráficos SVG ----
+const NS = "http://www.w3.org/2000/svg";
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+}
+const ejeTxt = v => v >= 1000 ? `${fmtN1.format(v / 1000)}k` : fmtN.format(v);
+
+/* Barras (periodo actual) + línea (comparación). puntos: [{label, corta, v, c, extra}] */
+function barras(cont, puntos, { fmt = eur, alto = 190, nombreA = "Actual", nombreC = "Comparación" } = {}) {
+  cont.innerHTML = "";
+  if (!puntos.length) { cont.innerHTML = `<div class="vacio">Sin datos</div>`; return; }
+  const ancho = Math.max(cont.clientWidth || 320, 260), izq = 36, abajo = 22, arriba = 8;
+  const w = ancho - izq, h = alto - abajo - arriba;
+  const max = niceMax(Math.max(...puntos.map(p => Math.max(p.v || 0, p.c || 0))));
+  const paso = w / puntos.length, bw = Math.max(2, Math.min(28, paso * 0.62));
+  const y = v => arriba + h - (v / max) * h;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${ancho} ${alto}`); svg.setAttribute("height", alto);
+  svg.setAttribute("role", "img");
+  let html = `<g class="grid">`;
+  for (let i = 0; i <= 4; i++) {
+    const v = max * i / 4;
+    html += `<line x1="${izq}" x2="${ancho}" y1="${y(v)}" y2="${y(v)}"/><text x="${izq - 6}" y="${y(v) + 4}" text-anchor="end">${ejeTxt(v)}</text>`;
+  }
+  html += `</g>`;
+  const cada = Math.ceil(puntos.length / Math.max(1, Math.floor(w / 34)));
+  puntos.forEach((p, i) => {
+    const cx = izq + paso * i + paso / 2, bh = Math.max(0, y(0) - y(p.v || 0));
+    const r = Math.min(4, bw / 2, bh);
+    // barra con las esquinas de arriba redondeadas y la base recta sobre el eje
+    if (bh > 0) html += `<path class="bar" d="M${cx - bw / 2},${y(0)} V${y(p.v) + r} q0,-${r} ${r},-${r} H${cx + bw / 2 - r} q${r},0 ${r},${r} V${y(0)} Z"/>`;
+    if (i % cada === 0) html += `<text x="${cx}" y="${alto - 6}" text-anchor="middle">${esc(p.corta)}</text>`;
+  });
+  if (puntos.some(p => p.c != null)) {
+    const pts = puntos.map((p, i) => `${izq + paso * i + paso / 2},${y(p.c || 0)}`).join(" ");
+    html += `<polyline class="comp" points="${pts}"/>`;
+    if (puntos.length <= 31) puntos.forEach((p, i) => { html += `<circle class="compdot" cx="${izq + paso * i + paso / 2}" cy="${y(p.c || 0)}" r="2.5"/>`; });
+  }
+  puntos.forEach((p, i) => { html += `<rect class="hit" data-i="${i}" x="${izq + paso * i}" y="${arriba}" width="${paso}" height="${h}"/>`; });
+  svg.innerHTML = html;
+  cont.appendChild(svg);
+  const tip = document.createElement("div"); tip.className = "tip"; cont.appendChild(tip);
+  const mostrar = e => {
+    const r = e.target.closest(".hit"); if (!r) return;
+    const p = puntos[+r.dataset.i], esc_ = cont.clientWidth / ancho;
+    const cmp = p.c != null ? `<br>${esc(nombreC)}: ${fmt(p.c)} ${delta(p.v, p.c).replace(/class="delta (\w+)"/, 'class="delta" style="color:inherit"')}` : "";
+    tip.innerHTML = `<b>${esc(p.label)}</b><br>${esc(nombreA)}: <b>${fmt(p.v)}</b>${cmp}${p.extra ? `<br>${p.extra}` : ""}`;
+    let x = (izq + paso * +r.dataset.i + paso / 2) * esc_;
+    x = Math.max(90, Math.min(cont.clientWidth - 90, x));
+    tip.style.left = `${x}px`; tip.style.top = `${y(Math.max(p.v || 0, p.c || 0)) * esc_}px`;
+    tip.classList.add("on");
+    svg.querySelectorAll(".bar").forEach((b, j) => b.classList.toggle("dim", j !== +r.dataset.i));
+  };
+  const ocultar = () => { tip.classList.remove("on"); svg.querySelectorAll(".bar").forEach(b => b.classList.remove("dim")); };
+  svg.addEventListener("pointermove", mostrar); svg.addEventListener("pointerdown", mostrar);
+  svg.addEventListener("pointerleave", ocultar);
+}
+
+// ---- vistas ----
+function pintar() {
+  const { act, cmp } = estado;
+  $("#actualizado").textContent = act.actualizado ? `act. ${act.actualizado.slice(11, 16)}` : "";
+  pintarResumen(act, cmp); pintarLocales(act, cmp); pintarProductos(); pintarPersonal(act, cmp); pintarCierres(act);
+}
+
+function pintarResumen(act, cmp) {
+  const a = totales(act), c = totales(cmp);
+  const sinVentas = estado.local === "Obrador";
+  const kpi = (lbl, val, cval, d) => `<div class="kpi"><div class="lbl">${lbl}</div><div class="val num">${val}</div><div class="cmp num">${d} <span>${cval}</span></div></div>`;
+  $("#kpis").innerHTML = [
+    sinVentas ? "" : kpi("Ventas", eur(a.neto), eur(c.neto), delta(a.neto, c.neto)),
+    sinVentas ? "" : kpi("Tickets", fmtN.format(a.docs), fmtN.format(c.docs), delta(a.docs, c.docs)),
+    sinVentas ? "" : kpi("Ticket medio", fmtEur2.format(a.ticket), fmtEur2.format(c.ticket), delta(a.ticket, c.ticket)),
+    kpi(sinVentas ? "Horas" : "Horas en locales", horasTxt(sinVentas ? a.horasTodas : a.horas), horasTxt(sinVentas ? c.horasTodas : c.horas), delta(sinVentas ? a.horasTodas : a.horas, sinVentas ? c.horasTodas : c.horas, true)),
+    sinVentas ? "" : kpi("€ por hora", a.eurh ? fmtEur2.format(a.eurh) : "—", c.eurh ? fmtEur2.format(c.eurh) : "—", delta(a.eurh, c.eurh)),
+    kpi("Olvidos de salida", fmtN.format(a.olvidos), fmtN.format(c.olvidos), delta(a.olvidos, c.olvidos, true)),
+  ].join("");
+
+  const n = entre(act.desde, act.hasta) + 1, g = granularidad(n);
+  const sA = serie(act, g, v => v.neto), sC = serie(cmp, g, v => v.neto);
+  const tA = serie(act, g, v => v.docs);
+  const nombreC = `Comparación`;
+  $("#ventas-sub").textContent = n === 1 ? "Por establecimiento" : `Por ${g === "dia" ? "día" : g}`;
+  $("#ventas-ley").innerHTML = `<span><i style="background:var(--series-1)"></i>${esc(textoRango(act.desde, act.hasta))}</span><span><i style="background:var(--series-comp);height:3px;border-radius:2px;vertical-align:3px"></i>${esc(textoRango(cmp.desde, cmp.hasta))}</span>`;
+  if (n === 1) {
+    // Un solo día: barras por local en vez de una sola barra
+    const porLocal = agrupar(act.ventas, "local"), porLocalC = agrupar(cmp.ventas, "local");
+    const ks = Object.keys(porLocal).sort((x, y) => porLocal[y].neto - porLocal[x].neto);
+    barras($("#ch-ventas"), ks.map(k => ({ label: k, corta: k.slice(0, 6), v: porLocal[k].neto, c: porLocalC[k]?.neto || 0,
+      extra: `${fmtN.format(porLocal[k].docs)} tickets` })), { nombreC });
+  } else {
+    barras($("#ch-ventas"), sA.map((p, i) => ({ label: etiquetaCubo(p.k, g), corta: etiquetaCubo(p.k, g, true), v: p.v,
+      c: sC[i]?.v ?? null, extra: `${fmtN.format(tA[i].v)} tickets` + (sC[i] ? ` · comp.: ${etiquetaCubo(sC[i].k, g)}` : "") })), { nombreC });
+  }
+
+  // €/h por local (actual vs comparación)
+  const eh = d => {
+    const v = agrupar(d.ventas, "local"), h = {};
+    d.horas.forEach(x => { h[x.local] = (h[x.local] || 0) + x.horas; });
+    return Object.fromEntries(Object.keys(h).filter(k => v[k]).map(k => [k, { v: v[k].neto, h: h[k], r: v[k].neto / h[k] }]));
+  };
+  const eA = eh(act), eC = eh(cmp), ksE = Object.keys(eA).sort((x, y) => eA[y].r - eA[x].r);
+  $("#card-eurh").hidden = sinVentas || !ksE.length;
+  barras($("#ch-eurh"), ksE.map(k => ({ label: k, corta: k.slice(0, 6), v: eA[k].r, c: eC[k]?.r ?? 0,
+    extra: `${eur(eA[k].v)} / ${horasTxt(eA[k].h)}` })), { fmt: x => fmtEur2.format(x), alto: 170, nombreC });
+
+  // Media por día de la semana (solo con al menos dos semanas)
+  const conSemana = n >= 14 && !sinVentas;
+  $("#card-semana").hidden = !conSemana;
+  if (conSemana) {
+    const media = d => {
+      const tot = Array(7).fill(0), cnt = Array(7).fill(0), porDia = {};
+      d.ventas.forEach(v => { porDia[v.dia] = (porDia[v.dia] || 0) + v.neto; });
+      Object.entries(porDia).forEach(([k, v]) => { if (v > 0) { const w = deIso(k).getDay(); tot[w] += v; cnt[w]++; } });
+      return [1, 2, 3, 4, 5, 6, 0].map(w => ({ w, v: cnt[w] ? tot[w] / cnt[w] : 0 }));
+    };
+    const mA = media(act), mC = media(cmp);
+    $("#semana-sub").textContent = "Solo los días con ventas.";
+    barras($("#ch-semana"), mA.map((p, i) => ({ label: DIAS_LARGO[p.w], corta: DIAS[p.w], v: p.v, c: mC[i].v })), { alto: 160, nombreC });
+  }
+}
+
+function agrupar(filas, clave) {
+  const r = {};
+  filas.forEach(v => { const x = r[v[clave]] ||= { neto: 0, docs: 0 }; x.neto += v.neto; x.docs += v.docs; });
+  return r;
+}
+
+function pintarLocales(act, cmp) {
+  const vA = agrupar(act.ventas, "local"), vC = agrupar(cmp.ventas, "local");
+  const hA = {}, hC = {}, est = {};
+  act.horas.forEach(h => { hA[h.local] = (hA[h.local] || 0) + h.horas; est[h.local] = (est[h.local] || 0) + h.estimados; });
+  cmp.horas.forEach(h => { hC[h.local] = (hC[h.local] || 0) + h.horas; });
+  const ks = Object.keys(vA).sort((a, b) => vA[b].neto - vA[a].neto);
+  const max = Math.max(...ks.map(k => vA[k].neto), 1);
+  $("#locales").innerHTML = ks.length ? ks.map(k => {
+    const a = vA[k], c = vC[k] || { neto: 0, docs: 0 };
+    const r = hA[k] ? a.neto / hA[k] : 0, rc = hC[k] && c.neto ? c.neto / hC[k] : 0;
+    return `<div class="fila"><div class="nom">${esc(k)}</div><div class="der num">${eur(a.neto)}</div>
+      <div class="det num"><span>${delta(a.neto, c.neto)} vs ${eur(c.neto)}</span><span>${fmtN.format(a.docs)} tickets</span>
+      <span>ticket ${fmtEur2.format(a.docs ? a.neto / a.docs : 0)}</span>
+      ${hA[k] ? `<span>${horasTxt(hA[k])}</span><span><b>${fmtEur2.format(r)}/h</b> ${delta(r, rc)}</span>` : ""}
+      ${est[k] ? `<span class="aviso">⚠ ${est[k]} fichaje${est[k] > 1 ? "s" : ""} estimado${est[k] > 1 ? "s" : ""}</span>` : ""}</div>
+      <div class="barra"><span style="width:${a.neto / max * 100}%"></span></div></div>`;
+  }).join("") : `<div class="vacio">Sin ventas en este periodo.</div>`;
+
+  const eA = {}, eC = {};
+  act.ventas.forEach(v => { const k = `${v.local}|${v.grupo}`; const x = eA[k] ||= { neto: 0, docs: 0 }; x.neto += v.neto; x.docs += v.docs; });
+  cmp.ventas.forEach(v => { const k = `${v.local}|${v.grupo}`; const x = eC[k] ||= { neto: 0, docs: 0 }; x.neto += v.neto; x.docs += v.docs; });
+  const ke = Object.keys(eA).sort((a, b) => eA[b].neto - eA[a].neto);
+  const maxe = Math.max(...ke.map(k => eA[k].neto), 1);
+  $("#estabs").innerHTML = ke.length ? ke.map(k => {
+    const [loc, g] = k.split("|"), a = eA[k], c = eC[k] || { neto: 0, docs: 0 };
+    return `<div class="fila"><div class="nom">${g === "cafeterias" ? "Cafetería" : "Tienda"} ${esc(loc)}</div><div class="der num">${eur(a.neto)}</div>
+      <div class="det num"><span>${delta(a.neto, c.neto)}</span><span>${fmtN.format(a.docs)} tickets</span><span>ticket ${fmtEur2.format(a.docs ? a.neto / a.docs : 0)}</span></div>
+      <div class="barra"><span style="width:${a.neto / maxe * 100}%"></span></div></div>`;
+  }).join("") : `<div class="vacio">Sin ventas en este periodo.</div>`;
+}
+
+function pintarProductos() {
+  const { act, cmp } = estado; if (!act) return;
+  const prev = new Map(cmp.productos.map(p => [p.articulo, p]));
+  const q = $("#buscar").value.trim().toLowerCase();
+  let lista = act.productos.map(p => ({ ...p, c: prev.get(p.articulo) }));
+  if (q) lista = lista.filter(p => p.articulo.toLowerCase().includes(q));
+  const dif = p => p.venta - (p.c?.venta || 0);
+  if (estado.orden === "uds") lista.sort((a, b) => b.uds - a.uds);
+  if (estado.orden === "sube") lista = lista.filter(p => dif(p) > 0).sort((a, b) => dif(b) - dif(a));
+  if (estado.orden === "baja") {
+    // Incluye los que se vendían en la comparación y ahora no (entre los 1000 primeros)
+    const ahora = new Set(act.productos.map(p => p.articulo));
+    const desaparecidos = cmp.productos.filter(p => !ahora.has(p.articulo) && (!q || p.articulo.toLowerCase().includes(q)))
+      .map(p => ({ articulo: p.articulo, uds: 0, venta: 0, c: p }));
+    lista = [...lista, ...desaparecidos].filter(p => dif(p) < 0).sort((a, b) => dif(a) - dif(b));
+  }
+  const total = sum(act.productos, p => p.venta);
+  $("#prod-sub").textContent = `${fmtN.format(act.productos.length)}${act.productos.length >= 1000 ? "+" : ""} productos · ${eur(total)}${estado.local ? ` en ${estado.local}` : ""}`;
+  const max = Math.max(...lista.map(p => estado.orden === "uds" ? p.uds : p.venta), 1);
+  $("#productos").innerHTML = lista.length ? lista.slice(0, estado.prodLimite).map((p, i) => {
+    const val = estado.orden === "uds" ? p.uds : p.venta;
+    const extra = estado.orden === "sube" || estado.orden === "baja" ? `<span><b>${dif(p) > 0 ? "+" : ""}${eur(dif(p))}</b></span>` : "";
+    return `<div class="fila"><div class="nom"><span class="rank">${i + 1}</span>${esc(p.articulo)}</div>
+      <div class="der num">${estado.orden === "uds" ? `${fmtN1.format(p.uds)} uds` : eur(p.venta)}</div>
+      <div class="det num"><span>${estado.orden === "uds" ? eur(p.venta) : `${fmtN1.format(p.uds)} uds`}</span>${extra}
+      <span>${delta(p.venta, p.c?.venta)} vs ${eur(p.c?.venta || 0)}</span></div>
+      <div class="barra"><span style="width:${Math.max(0, val) / max * 100}%"></span></div></div>`;
+  }).join("") : `<div class="vacio">Nada que mostrar.</div>`;
+  $("#prod-mas").hidden = lista.length <= estado.prodLimite;
+}
+
+function pintarPersonal(act, cmp) {
+  const hA = {}, hC = {}, est = {};
+  act.horas.forEach(h => { hA[h.local] = (hA[h.local] || 0) + h.horas; est[h.local] = (est[h.local] || 0) + h.estimados; });
+  cmp.horas.forEach(h => { hC[h.local] = (hC[h.local] || 0) + h.horas; });
+  // El Obrador no entra en horas_por_local (no vende): se suma desde las personas
+  const obr = act.personal.filter(p => p.local === "Obrador"), obrC = cmp.personal.filter(p => p.local === "Obrador");
+  if (obr.length) hA.Obrador = sum(obr, p => p.horas);
+  if (obrC.length) hC.Obrador = sum(obrC, p => p.horas);
+  const ks = Object.keys(hA).sort((a, b) => hA[b] - hA[a]), max = Math.max(...ks.map(k => hA[k]), 1);
+  $("#horas-local").innerHTML = ks.length ? ks.map(k => `<div class="fila"><div class="nom">${esc(k)}</div><div class="der num">${horasTxt(hA[k])}</div>
+    <div class="det num"><span>${delta(hA[k], hC[k], true)} vs ${horasTxt(hC[k] || 0)}</span>${est[k] ? `<span class="aviso">⚠ ${est[k]} estimado${est[k] > 1 ? "s" : ""}</span>` : ""}</div>
+    <div class="barra"><span style="width:${hA[k] / max * 100}%"></span></div></div>`).join("") : `<div class="vacio">Sin fichajes cerrados en este periodo.</div>`;
+
+  const prev = new Map(cmp.personal.map(p => [p.empleado, p]));
+  const maxp = Math.max(...act.personal.map(p => p.horas), 1);
+  $("#personal").innerHTML = act.personal.length ? act.personal.map(p => {
+    const c = prev.get(p.empleado);
+    return `<div class="fila"><div class="nom">${esc(p.empleado)}</div><div class="der num">${horasTxt(p.horas)}</div>
+      <div class="det num"><span>${esc(p.local)}</span><span>${p.dias} día${p.dias === 1 ? "" : "s"}</span>
+      <span>${horasTxt(p.dias ? p.horas / p.dias : 0)}/día</span>${c ? `<span>antes ${horasTxt(c.horas)}</span>` : ""}
+      ${p.olvidos ? `<span class="aviso">⚠ ${p.olvidos} olvido${p.olvidos > 1 ? "s" : ""} de salida</span>` : ""}</div>
+      <div class="barra"><span style="width:${p.horas / maxp * 100}%"></span></div></div>`;
+  }).join("") : `<div class="vacio">Sin fichajes.</div>`;
+}
+
+function pintarCierres(act) {
+  const n = entre(act.desde, act.hasta) + 1;
+  if (n > 62) { $("#cierres").innerHTML = `<div class="vacio">Elige un periodo de dos meses o menos para ver los cierres.</div>`; return; }
+  if (!act.cierres.length) { $("#cierres").innerHTML = `<div class="vacio">Sin cierres en este periodo.</div>`; return; }
+  const porDia = {};
+  act.cierres.forEach(c => (porDia[c.dia] ||= []).push(c));
+  $("#cierres").innerHTML = Object.keys(porDia).sort().reverse().map(dia => {
+    const cs = porDia[dia], llenos = cs.filter(c => c.venta || c.efectivo || c.retirado);
+    const vacios = cs.length - llenos.length;
+    return `<div style="margin-bottom:14px"><div class="dia-cab"><span>${esc(fechaLarga(dia))}</span><span class="num">${eur(sum(llenos, c => c.venta))}</span></div>
+      <div class="filas">${llenos.sort((a, b) => a.local.localeCompare(b.local) || a.fecha.localeCompare(b.fecha)).map(c => `
+        <div class="fila"><div class="nom">${esc(c.local)} · ${esc(c.caja)}</div><div class="der num">${fmtEur2.format(c.venta)}</div>
+        <div class="det num"><span>Z${c.numero} · ${esc(c.fecha.slice(11, 16))}</span><span>${esc((c.empleado || "—").split(" ")[0].toLowerCase().replace(/^./, x => x.toUpperCase()))}</span>
+        <span>efectivo ${fmtEur2.format(c.efectivo)}</span>${c.retirado ? `<span>retirado ${fmtEur2.format(c.retirado)}</span>` : ""}
+        ${c.declarado ? `<span class="${Math.abs(c.descuadre) >= 1 ? "aviso" : ""}">descuadre ${fmtEur2.format(c.descuadre)}</span>` : ""}</div></div>`).join("")}
+      </div>${vacios ? `<div class="sub" style="margin-top:4px">${vacios} Z vacío${vacios > 1 ? "s" : ""}</div>` : ""}</div>`;
+  }).join("");
+}
+
+// Redibuja los gráficos al girar el móvil o cambiar el ancho
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => estado.act && pintarResumen(estado.act, estado.cmp), 150); });
+// Al volver a la app después de un rato, refresca
+document.addEventListener("visibilitychange", () => { if (!document.hidden && estado.act && Date.now() - (estado.ultima || 0) > 5 * 60e3) cargar(); });
+
+pintarControles();
+$("#app").hidden = false;
+cargar();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>

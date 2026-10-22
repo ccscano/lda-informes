@@ -1,0 +1,15 @@
+[Unit]
+Description=App web La Dulce Alianza (panel sobre el histórico de HiOffice)
+After=network-online.target
+
+[Service]
+Type=simple
+Environment=TZ=Europe/Madrid
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/home/lda/presencia
+ExecStart=/usr/bin/python3 /home/lda/presencia/app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
