@@ -30,6 +30,13 @@ COLUMNAS = [
     ("Neto", "BigDecimal", "Metric", {"metricId": 1357}, 7, 5, 1),
     ("Docs", "BigDecimal", "Metric", {"metricId": 1355}, 10, 7, 1),
 ]
+# Mismo bloque con la hora del ticket (atributo 1077, el de "Ventas por horas" de Analytics)
+COLUMNAS_HORA = [
+    ("Establecimiento", "String", "Attribute", {"attributeId": 1061}, 1, 1, 1),
+    ("Hora", "Integer", "Attribute", {"attributeId": 1077}, 2, 98, 1),
+    ("Neto", "BigDecimal", "Metric", {"metricId": 1357}, 3, 5, 1),
+    ("Docs", "BigDecimal", "Metric", {"metricId": 1355}, 4, 7, 1),
+]
 FUSIONAR = {"** Bolleria Paseo **": "Tienda Paseo de Almeria"}
 NOMBRE = {
     "Cafeteria Paseo": "Cafetería Paseo", "Cafeteria Torrecardenas": "Cafetería Torrecárdenas",
@@ -45,6 +52,53 @@ def columna(nombre, tipo, origen, ids, pos, internal_id, col_type):
             "position": pos, "shown": True, "columnType": col_type,
             "isAttribute": origen == "Attribute", "isMetric": origen == "Metric",
             "blockId": BLOCK, "internalId": internal_id, **ids}
+
+
+def ventas_horas(token, dia):
+    """[{estab, hora, neto, docs}] del día, por establecimiento y hora del ticket (0-23)."""
+    datos = consulta(token, COLUMNAS_HORA, dia, dia, limite=2000)
+    suma = {}
+    for fila in datos.get("rows") or []:
+        _, nombre, hora, neto, docs = fila[:5]
+        if not nombre or hora is None:
+            continue
+        nombre = nombre.strip()
+        nombre = FUSIONAR.get(nombre, nombre)   # Bollería Paseo va con Tienda Paseo
+        s = suma.setdefault((nombre, int(hora)), [0.0, 0.0])
+        s[0] += float(neto or 0)
+        s[1] += float(docs or 0)
+    return [{"estab": e, "hora": h, "neto": n, "docs": d} for (e, h), (n, d) in suma.items()]
+
+
+def consulta(token, columnas, dia, hasta, limite):
+    """Consulta el bloque de ventas con otras columnas (p. ej. la hora)."""
+    f = dia.strftime("%Y/%m/%d")
+    body = {
+        "offset": 0, "limit": limite, "totals": False, "rest": False,
+        "datasources": [{"id": DATASOURCE}],
+        "columns": [columna(*c) for c in columnas],
+        "ordenableColumns": [],
+        "filters": [{"permission": False, "toDelete": False, "id": -1, "name": None,
+                     "dateRange": {"initialScale": 1, "finalScale": 0, "toDate": 1, "numLast": 0,
+                                   "numNext": 0, "numMaxDays": 0, "scaleOffset": 0,
+                                   "comparativeType": 2, "allowComparativeDates": False,
+                                   "displacement": 0, "displacementScale": 1},
+                     "dateValue": f, "dateValue2": hasta.strftime("%Y/%m/%d"), "filterType": 1,
+                     "profileType": None, "filterBlocks": []}],
+        "actions": [], "blocksRefresh": [], "blockOperations": [], "blockBridgeExportations": [],
+        "blockStyles": [], "blockStyleTypeId": 1,
+        "elementId": str(int(dt.datetime.now().timestamp() * 1000)),
+        "dashboard": DASHBOARD, "block": BLOCK, "linkLocation": None, "skipCache": True,
+        "ignoreDates": False, "id": 1, "dateReference": hasta.isoformat(),
+        "columnarCalculation": False, "refresh": False, "isDimensionSelector": False,
+        "calculateSubtotals": False, "useSizeInColumn": False, "forceNoResults": False,
+        "selectorType": 0, "useDistinct": False, "maxResults": None,
+    }
+    req = urllib.request.Request(f"{base.HIOFFICE}/ErpCloud/report/query", data=json.dumps(body).encode(),
+                                 headers={"x-auth-token": token, "Content-Type": "application/json",
+                                          "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.load(r)
 
 
 def ventas_dia(token, dia, hasta=None):

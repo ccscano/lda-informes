@@ -3,7 +3,7 @@
 Histórico de HiOffice en SQLite (datos/historico.db) para la app de La Dulce Alianza.
 
 Guarda, por día, lo mismo que leen los informes de Telegram, reutilizando sus consultas:
-  - ventas por establecimiento (ventas.ventas_dia)
+  - ventas por establecimiento (ventas.ventas_dia) y por hora (ventas.ventas_horas)
   - artículos por establecimiento (productos.articulos_dia)
   - fichajes cerrados (presencia.consultar)
   - cierres de caja (cierres.cierres)
@@ -36,6 +36,9 @@ ESQUEMA = """
 CREATE TABLE IF NOT EXISTS ventas (
     dia TEXT, estab TEXT, local TEXT, grupo TEXT, neto REAL, docs REAL, uds REAL,
     PRIMARY KEY (dia, estab));
+CREATE TABLE IF NOT EXISTS ventas_hora (
+    dia TEXT, estab TEXT, local TEXT, grupo TEXT, hora INTEGER, neto REAL, docs REAL,
+    PRIMARY KEY (dia, estab, hora));
 CREATE TABLE IF NOT EXISTS productos (
     dia TEXT, estab TEXT, local TEXT, articulo TEXT, uds REAL, venta REAL, docs REAL,
     PRIMARY KEY (dia, estab, articulo));
@@ -104,6 +107,18 @@ def cargar_ventas(con, token, desde, hasta):
         time.sleep(PAUSA)
 
 
+def cargar_ventas_hora(con, token, desde, hasta):
+    for d in dias(desde, hasta):
+        filas = reintentar(ventas.ventas_horas, token, d)
+        con.execute("DELETE FROM ventas_hora WHERE dia = ?", (d.isoformat(),))
+        con.executemany("INSERT INTO ventas_hora VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        [(d.isoformat(), f["estab"], ventas.local(f["estab"]), ventas.grupo(f["estab"]),
+                          f["hora"], f["neto"], f["docs"]) for f in filas])
+        marcar(con, "ventas_hora", d)
+        con.commit()
+        time.sleep(PAUSA)
+
+
 def cargar_productos(con, token, desde, hasta):
     for d in dias(desde, hasta):
         filas = reintentar(productos.articulos_dia, token, d)
@@ -147,7 +162,7 @@ def cargar_cierres(con, token, desde, hasta):
         time.sleep(PAUSA)
 
 
-CARGAS = {"ventas": cargar_ventas, "productos": cargar_productos,
+CARGAS = {"ventas": cargar_ventas, "ventas_hora": cargar_ventas_hora, "productos": cargar_productos,
           "fichajes": cargar_fichajes, "cierres": cargar_cierres}
 
 

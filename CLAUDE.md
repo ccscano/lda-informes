@@ -23,7 +23,7 @@ Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladul
 /semana /semanal /mensual [fecha] en privado a los ids de `TELEGRAM_USUARIOS` y en el canal.
 
 ## App (panel web con icono en el móvil)
-- `historico.py` guarda en `datos/historico.db` (SQLite) ventas por establecimiento, artículos,
+- `historico.py` guarda en `datos/historico.db` (SQLite) ventas por establecimiento y por hora, artículos,
   fichajes y cierres, por día, reutilizando las consultas de los informes. Timer `historico.timer`:
   cada hora de 9:20 a 23:20 y a las 04:30 (refresca 3 días; fichajes 21). Carga inicial o
   rehacer un rango: `python3 historico.py --desde 2023-01-01 [--hasta …] [--solo ventas,productos]`.
@@ -32,8 +32,10 @@ Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladul
   con Caddy en /etc/caddy/Caddyfile) sirve `app/` (PWA: index.html, manifest,
   sw.js, iconos) y `/api/datos?desde&hasta[&local]`. Si el periodo llega a hoy, lee hoy en directo
   de HiOffice (como mucho una vez por minuto) y lo guarda en el histórico.
-- Comparaciones: hasta las 22:00 hoy está "abierto": "Hoy" se enseña junto al mismo día completo de
-  la semana pasada, sin %, y los periodos de varios días comparan solo días cerrados (hoy va aparte).
+- Comparaciones con un periodo que llega a hoy (`&corte=1`): el último día de la comparación se corta
+  a la hora actual con `ventas_hora` (ventas por hora, atributo 1077 de HiOffice; la hora en curso en
+  proporción a los minutos) y los artículos en la misma proporción por local. Horas y €/h solo cuentan
+  días cerrados (los fichajes de hoy no están completos); en "Hoy" salen "al cierre".
 - Acceso: código de 6 cifras que el bot manda por Telegram a `TELEGRAM_USUARIOS`; la sesión
   (cookie de un año) se guarda en `datos/sesiones.json`.
 - Tras cambiar `app.py`: `systemctl --user restart app.service`. Si se cambia algo de `app/`,

@@ -8,7 +8,8 @@ HTTPS con un proxy delante. Sirve la web de app/ y una API de solo lectura:
   POST /api/codigo        manda un código de 6 cifras por Telegram a TELEGRAM_USUARIOS
   POST /api/entrar        {"codigo": "123456"} → cookie de sesión de un año
   GET  /api/datos?desde=AAAA-MM-DD&hasta=AAAA-MM-DD[&local=Paseo]
-                          si el periodo llega a hoy, antes lee hoy en directo de HiOffice
+                          si el periodo llega a hoy, antes lee hoy en directo de HiOffice;
+                          &corte=1 corta el último día a la hora actual (comparar con hoy en curso)
   GET  /api/salir
 
 Los datos los carga historico.py; la app solo consulta HiOffice para el día de hoy.
@@ -65,6 +66,7 @@ def refrescar_hoy():
                 con = historico.conectar()
                 try:
                     historico.cargar_ventas(con, directo["token"], hoy, hoy)
+                    historico.cargar_ventas_hora(con, directo["token"], hoy, hoy)
                     historico.cargar_productos(con, directo["token"], hoy, hoy)
                     historico.cargar_cierres(con, directo["token"], hoy, hoy)
                 finally:
@@ -75,6 +77,27 @@ def refrescar_hoy():
                 print(f"directo: {str(e)[:120]}", flush=True)
                 directo["token"] = None   # el token puede haber caducado: se rehace el login
         return directo["ultimo"]
+
+
+def asegurar_horas(dia):
+    """Las ventas por hora de un día pasado; si aún no están en el histórico, se leen de HiOffice."""
+    with sqlite3.connect(f"file:{historico.DB}?mode=ro", uri=True) as con:
+        if con.execute("SELECT 1 FROM cargas WHERE tabla = 'ventas_hora' AND dia = ?", (dia.isoformat(),)).fetchone():
+            return True
+    with cerrojo_directo:
+        try:
+            if not directo["token"] or time.time() - directo["token_t"] > TOKEN_VIDA:
+                directo["token"], directo["token_t"] = base.login(cfg), time.time()
+            con = historico.conectar()
+            try:
+                historico.cargar_ventas_hora(con, directo["token"], dia, dia)
+            finally:
+                con.close()
+            return True
+        except (Exception, SystemExit) as e:
+            print(f"horas {dia}: {str(e)[:120]}", flush=True)
+            directo["token"] = None
+            return False
 
 
 def leer_sesiones():
@@ -94,7 +117,11 @@ def local_fichaje(estab):
     return base.LOCAL_PRESENCIA.get(estab, base.NOMBRE_ESTAB.get(estab, estab))
 
 
-def datos(desde, hasta, local=None):
+def datos(desde, hasta, local=None, corte=None):
+    """Agregados del periodo. Con `corte` (una hora), el último día cuenta solo hasta esa hora, para
+    comparar con hoy en curso: ventas por hora (la hora del corte, en proporción a los minutos),
+    artículos en la misma proporción por local, y sin fichajes de ese día (los de hoy no están cerrados)."""
+    cortar = corte is not None and hasta < dt.date.today() and asegurar_horas(hasta)
     con = sqlite3.connect(f"file:{historico.DB}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     d0, d1 = desde.isoformat(), hasta.isoformat()
@@ -103,10 +130,27 @@ def datos(desde, hasta, local=None):
     ventas = [dict(r) for r in con.execute(
         f"SELECT dia, local, grupo, SUM(neto) neto, SUM(docs) docs FROM ventas "
         f"WHERE dia BETWEEN ? AND ? {filtro} GROUP BY dia, local, grupo ORDER BY dia", [d0, d1, *args])]
+    proporcion = {}   # local → parte de la venta del último día hecha antes del corte
+    if cortar:
+        h, frac = corte.hour, corte.minute / 60
+        hasta_corte = [dict(r, dia=d1) for r in con.execute(
+            f"SELECT local, grupo, SUM(CASE WHEN hora < ? THEN neto WHEN hora = ? THEN neto * ? ELSE 0 END) neto, "
+            f"SUM(CASE WHEN hora < ? THEN docs WHEN hora = ? THEN docs * ? ELSE 0 END) docs "
+            f"FROM ventas_hora WHERE dia = ? {filtro} GROUP BY local, grupo", [h, h, frac, h, h, frac, d1, *args])]
+        completo = {}
+        for v in ventas:
+            if v["dia"] == d1:
+                completo[v["local"]] = completo.get(v["local"], 0) + v["neto"]
+        cortado = {}
+        for v in hasta_corte:
+            cortado[v["local"]] = cortado.get(v["local"], 0) + v["neto"]
+        proporcion = {k: (cortado.get(k, 0) / x if x else 0) for k, x in completo.items()}
+        ventas = [v for v in ventas if v["dia"] != d1] + hasta_corte
 
     # Horas por local y día con la misma regla que el €/h de Telegram (olvidos estimados)
+    fin_fich = (hasta - dt.timedelta(days=1)).isoformat() if corte is not None else d1
     fich = [dict(r) for r in con.execute(
-        "SELECT * FROM fichajes WHERE dia BETWEEN ? AND ? ORDER BY inicio", [d0, d1])]
+        "SELECT * FROM fichajes WHERE dia BETWEEN ? AND ? ORDER BY inicio", [d0, fin_fich])]
     horas = []
     por_dia = {}
     for f in fich:
@@ -133,9 +177,22 @@ def datos(desde, hasta, local=None):
                         "olvidos": p["olvidos"], "local": max(p["locales"], key=p["locales"].get)}
                        for p in personal.values()), key=lambda p: -p["horas"])
 
-    productos = [dict(r) for r in con.execute(
-        f"SELECT articulo, SUM(uds) uds, SUM(venta) venta FROM productos WHERE dia BETWEEN ? AND ? {filtro} "
-        f"GROUP BY articulo ORDER BY venta DESC LIMIT 1000", [d0, d1, *args])]
+    if cortar:
+        suma = {}
+        filas = con.execute(
+            f"SELECT dia, local, articulo, SUM(uds) uds, SUM(venta) venta FROM productos "
+            f"WHERE dia BETWEEN ? AND ? {filtro} GROUP BY dia = ?, local, articulo", [d0, d1, *args, d1])
+        for r in filas:
+            f = proporcion.get(r["local"], 0) if r["dia"] == d1 else 1
+            a = suma.setdefault(r["articulo"], [0, 0])
+            a[0] += r["uds"] * f
+            a[1] += r["venta"] * f
+        productos = sorted(({"articulo": k, "uds": u, "venta": v} for k, (u, v) in suma.items()),
+                           key=lambda p: -p["venta"])[:1000]
+    else:
+        productos = [dict(r) for r in con.execute(
+            f"SELECT articulo, SUM(uds) uds, SUM(venta) venta FROM productos WHERE dia BETWEEN ? AND ? {filtro} "
+            f"GROUP BY articulo ORDER BY venta DESC LIMIT 1000", [d0, d1, *args])]
 
     cierres = []
     if (hasta - desde).days < MAX_DIAS_CIERRES:
@@ -148,7 +205,8 @@ def datos(desde, hasta, local=None):
     actualizado = con.execute("SELECT MAX(actualizado) FROM cargas").fetchone()[0]
     primer_dia = con.execute("SELECT MIN(dia) FROM ventas WHERE neto > 0").fetchone()[0]
     con.close()
-    return {"desde": d0, "hasta": d1, "local": local, "ventas": ventas, "horas": horas,
+    return {"desde": d0, "hasta": d1, "local": local, "corte": corte.strftime("%H:%M") if corte else None,
+            "ventas": ventas, "horas": horas,
             "personal": personal, "productos": productos, "cierres": cierres,
             "locales": locales, "actualizado": actualizado, "primer_dia": primer_dia}
 
@@ -227,7 +285,8 @@ class Manejador(http.server.BaseHTTPRequestHandler):
             if hasta >= dt.date.today():
                 ts = refrescar_hoy()
                 en_directo = dt.datetime.fromtimestamp(ts).isoformat(timespec="seconds") if ts else None
-            res = datos(desde, hasta, (q.get("local") or [None])[0])
+            corte = dt.datetime.now() if q.get("corte") == ["1"] else None
+            res = datos(desde, hasta, (q.get("local") or [None])[0], corte)
             res["directo"] = en_directo
             return self.responder(200, res)
         if url.path == "/api/salir":
