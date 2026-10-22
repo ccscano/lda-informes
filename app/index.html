@@ -172,6 +172,12 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 .pl-fila .nom small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
 .pl-fila select { max-width: 52%; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; }
 .pl-fila.manual select { border-color: var(--accent); }
+.pl-fila { flex-wrap: wrap; }
+.pl-fechas { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; padding: 6px 0 2px; font-size: 13px; }
+.pl-fechas .tramo { display: flex; gap: 8px; align-items: center; color: var(--text-2); }
+.pl-fechas .tramo button, .pl-btn { border: 0; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 2px 4px; font-size: 13px; }
+.pl-fechas form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pl-fechas input[type=date], .pl-fechas form select { padding: 5px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; max-width: none; }
 .mapa { overflow-x: auto; margin: 0 -14px; padding: 0 14px; }
 .mapa table { border-collapse: separate; border-spacing: 2px; font-size: 10px; }
 .mapa th { color: var(--muted); font-weight: 500; padding: 0 2px; }
@@ -849,13 +855,34 @@ function pintarPlantilla() {
     const defecto = p.origen === "tpv" ? `Según TPV: ${esc(p.area)}` : p.propuesta ? `Propuesta: ${esc(p.propuesta)}` : "Sin asignar";
     const opciones = [`<option value="">${defecto}</option>`]
       .concat(plantilla.areas.map(a => `<option value="${esc(a)}"${p.manual === a ? " selected" : ""}>${esc(a)}</option>`)).join("");
-    html += `<div class="pl-fila${p.manual ? " manual" : ""}"><div class="nom">${esc(p.empleado.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()))}<small>${esc(nota)}</small></div>
-      <select data-emp="${esc(p.empleado)}" aria-label="Área">${opciones}</select></div>`;
+    const tramos = p.tramos ? p.tramos.map(t => `<div class="tramo"><span>${t.desde ? `desde ${esc(fechaCorta(t.desde))} ${t.desde.slice(0, 4)}` : "antes"}: <b>${esc(t.area)}</b></span>${t.desde ? `<button data-borrar="${esc(t.desde)}" data-emp="${esc(p.empleado)}" aria-label="Quitar tramo">✕</button>` : ""}</div>`).join("") : "";
+    const abierto = estado.plAbierto === p.empleado;
+    html += `<div class="pl-fila${p.manual ? " manual" : ""}"><div class="nom">${esc(p.empleado.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()))}<small>${esc(nota)}${p.tramos ? " · área por fechas" : ""}</small>
+        <button class="pl-btn" data-fechas="${esc(p.empleado)}">${abierto ? "Cerrar" : "Por fechas"}</button></div>
+      <select data-emp="${esc(p.empleado)}" aria-label="Área">${opciones}</select>
+      ${abierto ? `<div class="pl-fechas">${tramos || `<div class="tramo">Sin tramos: el área vale para todas las fechas.</div>`}
+        <form data-emp="${esc(p.empleado)}"><span>Desde</span><input type="date" name="desde" required value="${esc(estado.hasta)}">
+          <select name="area">${plantilla.areas.map(a => `<option>${esc(a)}</option>`).join("")}</select><button class="pl-btn" type="submit">Añadir</button></form></div>` : ""}</div>`;
   }
   $("#plantilla").innerHTML = html || `<div class="vacio">Sin fichajes en este periodo.</div>`;
 }
+async function guardarArea(datos) {
+  await api("/api/plantilla", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(datos) });
+  await cargarPlantilla(); cargar();
+}
+$("#plantilla").addEventListener("click", async e => {
+  const f = e.target.closest("[data-fechas]");
+  if (f) { estado.plAbierto = estado.plAbierto === f.dataset.fechas ? null : f.dataset.fechas; pintarPlantilla(); return; }
+  const b = e.target.closest("[data-borrar]");
+  if (b) await guardarArea({ empleado: b.dataset.emp, area: null, desde: b.dataset.borrar });
+});
+$("#plantilla").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.target, d = new FormData(f);
+  await guardarArea({ empleado: f.dataset.emp, area: d.get("area"), desde: d.get("desde") });
+});
 $("#plantilla").addEventListener("change", async e => {
-  const sel = e.target.closest("select[data-emp]"); if (!sel) return;
+  const sel = e.target.closest("select[data-emp]"); if (!sel || sel.closest("form")) return;
   sel.disabled = true;
   try {
     await api("/api/plantilla", { method: "POST", headers: { "Content-Type": "application/json" },

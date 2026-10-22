@@ -119,12 +119,40 @@ def leer_manual():
         return {}
 
 
-def guardar_manual(empleado, area):
+def area_en(valor, dia):
+    """Área elegida a mano para un día. El valor guardado es un área (para siempre) o una lista de
+    tramos [{"desde": "AAAA-MM-DD" o None, "area": …}] ordenada: vale el último tramo que ya ha
+    empezado ese día (antes del primero, el primero)."""
+    if not valor or isinstance(valor, str):
+        return valor
+    actual = valor[0]["area"]
+    for t in valor:
+        if not t.get("desde") or (dia and t["desde"] <= dia):
+            actual = t["area"]
+    return actual
+
+
+def guardar_manual(empleado, area, desde=None):
+    """Sin `desde`, el área vale para siempre (o se borra si es None). Con `desde`, se añade un
+    tramo: desde esa fecha, esa área (con area None se quita el tramo que empieza ese día)."""
     m = leer_manual()
-    if area:
-        m[empleado] = area
+    if not desde:
+        if area:
+            m[empleado] = area
+        else:
+            m.pop(empleado, None)
     else:
-        m.pop(empleado, None)
+        tramos = m.get(empleado)
+        if isinstance(tramos, str) or tramos is None:
+            tramos = [{"desde": None, "area": tramos or SIN_AREA}]
+        tramos = [t for t in tramos if t.get("desde") != desde]
+        if area:
+            tramos.append({"desde": desde, "area": area})
+        tramos.sort(key=lambda t: t.get("desde") or "")
+        if len(tramos) == 1 and not tramos[0].get("desde"):
+            m[empleado] = tramos[0]["area"]
+        else:
+            m[empleado] = tramos
     FICHERO.write_text(json.dumps(m, ensure_ascii=False, indent=1, sort_keys=True))
     return m
 
@@ -232,7 +260,8 @@ def asignador(con):
 
     def area(empleado, estab, dia=None):
         nombre = quien(empleado, estab, dia) if dia else normal(empleado)
-        return (area_fichaje(estab) or manual.get(nombre) or tpv.get(nombre)
+        a = area_en(manual.get(nombre), dia)
+        return (area_fichaje(estab) or (a if a != SIN_AREA else None) or tpv.get(nombre)
                 or (prop.get(nombre) or {}).get("propuesta") or SIN_AREA)
     return area
 
@@ -279,10 +308,13 @@ def resumen(con, desde, hasta):
     res = []
     for nombre, g in gente.items():
         p = prop.get(nombre) or {}
-        origen, area = ("manual", manual[nombre]) if nombre in manual else \
+        a_manual = area_en(manual.get(nombre), hasta)
+        origen, area = ("manual", a_manual) if a_manual and a_manual != SIN_AREA else \
             ("tpv", g["tpv"]) if g["tpv"] else ("propuesta", p.get("propuesta")) if p.get("propuesta") else (None, SIN_AREA)
         res.append({"empleado": nombre, "local": max(g["locales"], key=g["locales"].get), "area": area,
                     "origen": origen, "propuesta": p.get("propuesta"), "tickets": p.get("tickets", 0),
-                    "reparto": p.get("reparto", {}), "manual": manual.get(nombre), "horas": round(g["horas"], 1)})
+                    "reparto": p.get("reparto", {}), "manual": a_manual,
+                    "tramos": manual[nombre] if isinstance(manual.get(nombre), list) else None,
+                    "horas": round(g["horas"], 1)})
     res.sort(key=lambda r: (r["local"], r["area"] != SIN_AREA, r["empleado"]))
     return {"personas": res, "areas": AREAS, "sin_unir": sorted(sin_unir.items(), key=lambda x: -x[1])[:15]}

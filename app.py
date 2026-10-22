@@ -372,10 +372,15 @@ class Manejador(http.server.BaseHTTPRequestHandler):
         if self.path == "/api/plantilla":
             if not self.sesion_valida():
                 return self.responder(401, {"error": "sesion"})
-            emp, area = str(cuerpo.get("empleado", "")).strip(), cuerpo.get("area")
+            emp, area, desde = str(cuerpo.get("empleado", "")).strip(), cuerpo.get("area"), cuerpo.get("desde")
             if not emp or (area is not None and area not in plantilla.AREAS):
                 return self.responder(400, {"error": "datos"})
-            plantilla.guardar_manual(plantilla.normal(emp), area)
+            if desde:
+                try:
+                    desde = dt.date.fromisoformat(desde).isoformat()
+                except ValueError:
+                    return self.responder(400, {"error": "fecha"})
+            plantilla.guardar_manual(plantilla.normal(emp), area, desde)
             return self.responder(200, {"ok": True})
         if self.path == "/api/entrar":
             if not comprobar_codigo(cuerpo.get("codigo", "")):
