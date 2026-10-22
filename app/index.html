@@ -16,6 +16,7 @@
 <style>
 :root {
   color-scheme: light;
+  --area-cafeteria: #2a78d6; --area-tienda: #eb6834; --area-charcuteria: #1baf7a; --area-sin: #b9b4ab;
   --bg: #faf8f5; --surface: #ffffff; --surface-2: #f3f0eb; --line: #e6e1d9;
   --text: #1d1b18; --text-2: #5c5750; --muted: #8a847b;
   --accent: #9a5b2e; --accent-ink: #ffffff; --accent-soft: #f4e9df;
@@ -32,6 +33,7 @@
     --series-1: #3987e5; --series-comp: #5d5a55;
     --good: #45c26f; --bad: #f0706b; --warn: #e0a040;
     --shadow: none;
+    --area-cafeteria: #3987e5; --area-tienda: #d95926; --area-charcuteria: #199e70; --area-sin: #5d5a55;
   }
 }
 :root[data-theme="dark"] {
@@ -42,8 +44,10 @@
   --series-1: #3987e5; --series-comp: #5d5a55;
   --good: #45c26f; --bad: #f0706b; --warn: #e0a040;
   --shadow: none;
+  --area-cafeteria: #3987e5; --area-tienda: #d95926; --area-charcuteria: #199e70; --area-sin: #5d5a55;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
 body {
   font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -168,6 +172,29 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 .pl-fila .nom small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
 .pl-fila select { max-width: 52%; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; }
 .pl-fila.manual select { border-color: var(--accent); }
+.mapa { overflow-x: auto; margin: 0 -14px; padding: 0 14px; }
+.mapa table { border-collapse: separate; border-spacing: 2px; font-size: 10px; }
+.mapa th { color: var(--muted); font-weight: 500; padding: 0 2px; }
+.mapa td { width: 30px; min-width: 30px; height: 26px; text-align: center; border-radius: 4px; font-variant-numeric: tabular-nums; }
+.tabla { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.tabla th { text-align: right; color: var(--muted); font-weight: 500; font-size: 11px; padding: 4px 4px; border-bottom: 1px solid var(--line); }
+.tabla td { text-align: right; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.tabla th:first-child, .tabla td:first-child { text-align: left; }
+.tabla tr.baja td { color: var(--warn); }
+@media (max-width: 520px) { .tabla .opc { display: none; } }
+.tabla-scroll { overflow-x: auto; margin: 0 -14px; padding: 0 14px; }
+.franjas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.franjas .kpi .val { font-size: 19px; }
+.pila { display: flex; height: 14px; border-radius: 4px; overflow: hidden; gap: 2px; margin: 6px 0 2px; background: var(--surface); }
+.pila span { display: block; height: 100%; }
+.ley { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); margin-bottom: 8px; }
+.ley i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.objetivo .barra { height: 8px; position: relative; overflow: visible; }
+.objetivo .barra em { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); border-radius: 1px; }
+.subir { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; font-size: 13px; color: var(--text-2); }
+.chips-mini { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chips-mini button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+.chips-mini button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .chip-area { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 </style>
 </head>
@@ -210,9 +237,23 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 <main id="main">
   <section class="vista activa" id="v-resumen">
     <div class="kpis" id="kpis"></div>
+    <div class="card objetivo" id="card-objetivo" hidden><h2 id="obj-titulo">Objetivo del mes</h2><p class="sub" id="obj-sub"></p><div class="filas" id="objetivo"></div></div>
     <div class="card"><h2>Ventas</h2><p class="sub" id="ventas-sub"></p><div class="legend" id="ventas-ley"></div><div class="chart" id="ch-ventas"></div></div>
     <div class="card" id="card-eurh"><h2>€ por hora trabajada</h2><p class="sub">Ventas de tiendas y cafeterías entre las horas fichadas en cada local. El Obrador no cuenta.</p><div class="chart" id="ch-eurh"></div></div>
     <div class="card" id="card-semana"><h2>Venta media por día de la semana</h2><p class="sub" id="semana-sub"></p><div class="chart" id="ch-semana"></div></div>
+  </section>
+
+  <section class="vista" id="v-analisis">
+    <div class="card"><h2>Ventas y personal por hora</h2><p class="sub" id="ph-sub">Media por día del periodo (días cerrados). Las personas salen de los tramos fichados de cada área.</p>
+      <div class="chips-mini" id="ph-areas"></div>
+      <p class="sub" style="margin:0 0 4px">€ vendidos por persona trabajando, en cada hora</p><div class="chart" id="ch-ph"></div>
+      <div class="tabla-scroll" style="margin-top:10px"><table class="tabla" id="tabla-ph"></table></div></div>
+    <div class="card"><h2>Mapa de calor</h2><p class="sub">Venta media por día de la semana y hora. Más oscuro, más venta.</p><div class="mapa" id="mapa"></div></div>
+    <div class="card"><h2>Ticket medio por franja</h2><p class="sub">Desayuno hasta las 12, mediodía de 12 a 16 y tarde desde las 16.</p><div class="franjas" id="franjas"></div><div class="tabla-scroll"><table class="tabla" id="tabla-franjas"></table></div></div>
+    <div class="card"><h2>Peso de cada área</h2><p class="sub">Parte de la venta de cada local. Entre paréntesis, la diferencia en puntos frente a la comparación.</p><div class="ley" id="ley-areas"></div><div class="filas" id="peso-areas"></div></div>
+    <div class="card"><h2>Coste de personal</h2><p class="sub" id="coste-sub">Horas fichadas × coste por hora de cada área en su trimestre (sueldos + gratificaciones + seguridad social del Excel de explotación ÷ horas fichadas). Porcentaje sobre ventas sin IVA.</p><div class="tabla-scroll"><table class="tabla" id="tabla-coste"></table></div></div>
+    <div class="card"><h2>Cuenta de explotación</h2><p class="sub" id="margen-sub">Trimestres del Excel de explotación. Margen bruto = (ventas − compras − reparto del obrador − variación de existencias − otras secciones) ÷ ventas, como en la hoja «Ratios».</p><div class="tabla-scroll"><table class="tabla" id="tabla-margen"></table></div>
+      <div class="subir"><button class="btn sec" id="subir-excel" style="padding:8px 12px">Subir Excel de explotación</button><input type="file" id="fichero-excel" accept=".xlsx" hidden><span id="subir-msg"></span></div></div>
   </section>
 
   <section class="vista" id="v-locales">
@@ -223,6 +264,8 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
   <section class="vista" id="v-productos">
     <div class="card">
       <h2>Productos</h2><p class="sub" id="prod-sub"></p>
+      <div class="seg" role="group" aria-label="Ver" id="prod-modo"><button data-modo="articulos" aria-pressed="true">Artículos</button><button data-modo="familias" aria-pressed="false">Familias</button></div>
+      <div id="prod-familia" class="chips-mini" hidden></div>
       <input class="buscar" id="buscar" type="search" placeholder="Buscar producto">
       <div class="seg" role="group" aria-label="Ordenar por">
         <button data-orden="venta" aria-pressed="true">Por venta</button>
@@ -237,17 +280,20 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 
   <section class="vista" id="v-personal">
     <div class="card"><h2>Horas por local y área</h2><p class="sub">Fichajes cerrados. Los olvidos de salida se estiman hasta la última salida del local ese día.</p><div class="filas" id="horas-local"></div></div>
+    <div class="card"><h2>Fichajes a revisar</h2><p class="sub">Olvidos de salida, turnos de más de 12 h y fichajes en un local distinto del habitual de la persona.</p><div class="filas" id="anomalias"></div><button class="tabla-mas" id="anom-mas" hidden>Ver más</button></div>
     <div class="card"><h2>Personas</h2><p class="sub">Horas de fichajes completos. Los olvidos de salida se cuentan aparte.</p><div class="filas" id="personal"></div></div>
     <div class="card"><h2>Área de cada persona</h2><p class="sub">Quien ha fichado en el periodo elegido. Todos fichan en el TPV de la tienda, así que el área se propuso según dónde cobra cada uno (uniendo los subcódigos M-/T- de la PDA) y quedó fijada. Cámbiala si no es correcta: se aplica a todas sus horas. Quien no cobra nunca sale arriba, sin área.</p><div id="plantilla"><div class="vacio">Cargando…</div></div></div>
   </section>
 
   <section class="vista" id="v-cajas">
+    <div class="card"><h2>Control de cajas</h2><p class="sub">Por caja: % de la venta cobrada en efectivo, Z hechos y vacíos, y días sin Z en cajas que venden a diario. El Z de madrugada o de mañana cuenta para el día anterior.</p><div class="filas" id="control-cajas"></div></div>
     <div class="card"><h2>Cierres de caja</h2><p class="sub">Arqueos Z cerrados. Nadie declara efectivo, así que el descuadre no se muestra salvo que haya declarado.</p><div id="cierres"></div></div>
   </section>
 </main>
 
 <nav aria-label="Secciones">
   <button data-vista="resumen" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Resumen</button>
+  <button data-vista="analisis"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Análisis</button>
   <button data-vista="locales"><svg viewBox="0 0 24 24"><path d="M3 10l1.5-5h15L21 10M4 10v10h16V10M3 10h18M9 20v-6h6v6"/></svg>Locales</button>
   <button data-vista="productos"><svg viewBox="0 0 24 24"><path d="M5 11h14l-1.5 9h-11zM8 11V8a4 4 0 0 1 8 0v3"/></svg>Productos</button>
   <button data-vista="personal"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Personal</button>
@@ -374,6 +420,7 @@ async function cargar() {
     rellenarLocales(act.locales);
     pintar();
     cargarPlantilla();
+    cargarAnalisis(id);
   } catch (e) {
     if (e.message !== "sesion") $("#periodo").textContent = "No se han podido cargar los datos. Prueba otra vez.";
   } finally {
@@ -430,10 +477,10 @@ document.querySelector("nav").onclick = e => {
   const b = e.target.closest("[data-vista]"); if (!b) return;
   estado.vista = b.dataset.vista; persistir(); pintarControles(); window.scrollTo(0, 0);
 };
-document.querySelector(".seg").onclick = e => {
+document.querySelector(".seg:not(#prod-modo)").onclick = e => {
   const b = e.target.closest("[data-orden]"); if (!b) return;
   estado.orden = b.dataset.orden; estado.prodLimite = 30;
-  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  document.querySelectorAll(".seg:not(#prod-modo) button").forEach(x => x.setAttribute("aria-pressed", x === b));
   pintarProductos();
 };
 $("#buscar").oninput = () => { estado.prodLimite = 30; pintarProductos(); };
@@ -576,6 +623,7 @@ function pintar() {
 }
 
 function pintarResumen(act, cmp) {
+  pintarObjetivo();
   const a = totales(act), c = totales(cmp);
   const sinVentas = estado.local === "Obrador";
   const kpi = (lbl, val, cval, d) => `<div class="kpi"><div class="lbl">${lbl}</div><div class="val num">${val}</div><div class="cmp num">${d} <span>${cval}</span></div></div>`;
@@ -588,6 +636,8 @@ function pintarResumen(act, cmp) {
     kpi((sinVentas ? "Horas" : "Horas en locales") + (estado.parcial ? " (días cerrados)" : ""), horasTxt(sinVentas ? a.horasTodas : a.horas), horasTxt(sinVentas ? c.horasTodas : c.horas), delta(sinVentas ? a.horasTodas : a.horas, sinVentas ? c.horasTodas : c.horas, true)),
     sinVentas ? "" : estado.soloHoy ? kpi("€ por hora", "al cierre", "", "") :
     kpi("€ por hora" + (estado.parcial ? " (días cerrados)" : ""), a.eurh ? fmtEur2.format(a.eurh) : "—", c.eurh ? fmtEur2.format(c.eurh) : "—", delta(a.eurh, c.eurh)),
+    sinVentas ? "" : (() => { const ca = costeTotal(estado.an), cc = costeTotal(estado.anC);
+      return kpi("Coste de personal" + (estado.parcial ? " (días cerrados)" : ""), ca == null ? "…" : pct(ca), cc == null ? "" : pct(cc), ca == null || cc == null ? "" : delta(ca, cc, true)); })(),
     kpi("Olvidos de salida", fmtN.format(a.olvidos), fmtN.format(c.olvidos), delta(a.olvidos, c.olvidos, true)),
   ].join("");
 
@@ -685,16 +735,41 @@ function pintarLocales(act, cmp) {
       <div class="det"><span>Horas de personas sin área: asígnalas en Personal para repartirlas.</span></div></div>`;
     return `<div class="fila"><div class="nom">${esc(loc)} · ${esc(area)}</div><div class="der num">${eur(a.neto)}</div>
       <div class="det num"><span>${delta(a.neto, c.neto)}</span><span>${fmtN.format(a.docs)} tickets</span><span>ticket ${fmtEur2.format(a.docs ? a.neto / a.docs : 0)}</span>
-      ${a.horas ? `<span>${horasTxt(a.horas)}</span><span><b>${fmtEur2.format(r)}/h</b> ${delta(r, rc)}</span>` : ""}</div>
+      ${a.horas ? `<span>${horasTxt(a.horas)}</span><span><b>${fmtEur2.format(r)}/h</b> ${delta(r, rc)}</span><span>${fmtN1.format(a.docs / a.horas)} tickets/h</span>` : ""}</div>
       <div class="barra"><span style="width:${a.neto / maxe * 100}%"></span></div></div>`;
   }).join("") : `<div class="vacio">Sin ventas en este periodo.</div>`;
 }
 
+function pintarFamilias() {
+  const { act, cmp } = estado;
+  const prev = new Map((cmp.familias || []).map(f => [f.familia, f]));
+  const q = $("#buscar").value.trim().toLowerCase();
+  const lista = (act.familias || []).filter(f => !q || f.familia.toLowerCase().includes(q));
+  const total = sum(act.familias || [], f => f.venta), max = Math.max(1, ...lista.map(f => f.venta));
+  $("#prod-sub").textContent = `${fmtN.format((act.familias || []).length)} familias · ${eur(total)}${estado.local ? ` en ${estado.local}` : ""}. Toca una para ver sus artículos.`;
+  $("#productos").innerHTML = lista.map((f, i) => { const c = prev.get(f.familia);
+    return `<div class="fila" data-fam="${esc(f.familia)}" style="cursor:pointer"><div class="nom"><span class="rank">${i + 1}</span>${esc(f.familia)}</div><div class="der num">${eur(f.venta)}</div>
+      <div class="det num"><span>${pct(total ? f.venta / total * 100 : 0)}</span><span>${fmtN.format(f.uds)} uds · ${f.articulos} artículos</span><span>${delta(f.venta, c?.venta)} vs ${eur(c?.venta || 0)}</span></div>
+      <div class="barra"><span style="width:${f.venta / max * 100}%"></span></div></div>`; }).join("") || `<div class="vacio">Nada que mostrar.</div>`;
+  $("#prod-mas").hidden = true;
+}
+$("#prod-modo").onclick = e => { const b = e.target.closest("[data-modo]"); if (!b) return; estado.prodModo = b.dataset.modo;
+  document.querySelectorAll("#prod-modo button").forEach(x => x.setAttribute("aria-pressed", x === b)); pintarProductos(); };
+$("#productos").addEventListener("click", e => { const f = e.target.closest("[data-fam]"); if (!f) return;
+  estado.familia = f.dataset.fam; estado.prodModo = "articulos"; $("#buscar").value = "";
+  document.querySelectorAll("#prod-modo button").forEach(x => x.setAttribute("aria-pressed", x.dataset.modo === "articulos")); pintarProductos(); });
+$("#prod-familia").onclick = e => { if (e.target.closest("button")) { estado.familia = null; pintarProductos(); } };
+
 function pintarProductos() {
   const { act, cmp } = estado; if (!act) return;
+  $("#prod-familia").hidden = !estado.familia || estado.prodModo !== "articulos";
+  $("#prod-familia").innerHTML = estado.familia ? `<button aria-pressed="true">Familia: ${esc(estado.familia)} ✕</button>` : "";
+  document.querySelector(".seg:not(#prod-modo)").hidden = estado.prodModo === "familias";
+  if (estado.prodModo === "familias") return pintarFamilias();
   const prev = new Map(cmp.productos.map(p => [p.articulo, p]));
   const q = $("#buscar").value.trim().toLowerCase();
   let lista = act.productos.map(p => ({ ...p, c: prev.get(p.articulo) }));
+  if (estado.familia) lista = lista.filter(p => p.familia === estado.familia);
   if (q) lista = lista.filter(p => p.articulo.toLowerCase().includes(q));
   const dif = p => p.venta - (p.c?.venta || 0);
   if (estado.orden === "uds") lista.sort((a, b) => b.uds - a.uds);
@@ -702,7 +777,7 @@ function pintarProductos() {
   if (estado.orden === "baja") {
     // Incluye los que se vendían en la comparación y ahora no (entre los 1000 primeros)
     const ahora = new Set(act.productos.map(p => p.articulo));
-    const desaparecidos = cmp.productos.filter(p => !ahora.has(p.articulo) && (!q || p.articulo.toLowerCase().includes(q)))
+    const desaparecidos = cmp.productos.filter(p => !ahora.has(p.articulo) && (!q || p.articulo.toLowerCase().includes(q)) && (!estado.familia || p.familia === estado.familia))
       .map(p => ({ articulo: p.articulo, uds: 0, venta: 0, c: p }));
     lista = [...lista, ...desaparecidos].filter(p => dif(p) < 0).sort((a, b) => dif(a) - dif(b));
   }
@@ -788,6 +863,166 @@ $("#plantilla").addEventListener("change", async e => {
     await cargarPlantilla(); cargar();
   } finally { sel.disabled = false; }
 });
+
+
+// ================= Análisis (indicadores sobre /api/analisis) =================
+const MESES_LARGO = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const COLOR_AREA = { "Cafetería": "var(--area-cafeteria)", "Tienda": "var(--area-tienda)", "Charcutería": "var(--area-charcuteria)", "Sin asignar": "var(--area-sin)" };
+const RAMPA = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
+const pct = (x, d = 1) => x == null ? "—" : `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: d }).format(x)} %`;
+const pp = (a, b) => { if (a == null || b == null) return ""; const d = a - b; if (Math.abs(d) < 0.05) return "(= )"; return `(${d > 0 ? "+" : "−"}${fmtN1.format(Math.abs(d))} pp)`; };
+estado.phArea = "Todas"; estado.prodModo = "articulos"; estado.familia = null; estado.anomLimite = 30;
+
+async function cargarAnalisis(id) {
+  // Días cerrados: si el periodo llega a hoy, el análisis acaba ayer (salvo que sea solo hoy)
+  const h = hoy(), parcial = estado.dhasta === h && estado.ddesde < h;
+  const fin = parcial ? masDias(h, -1) : estado.dhasta, finC = parcial ? masDias(estado.chasta, -1) : estado.chasta;
+  const url = (d, f) => { const q = new URLSearchParams({ desde: d, hasta: f }); if (estado.local) q.set("local", estado.local); return `/api/analisis?${q}`; };
+  try {
+    const [a, c] = await Promise.all([api(url(estado.ddesde, fin)).then(r => r.json()), api(url(estado.cdesde, finC)).then(r => r.json())]);
+    if (id !== peticion) return;
+    estado.an = a; estado.anC = c;
+    pintarResumen(estado.act, estado.cmp); pintarAnalisis(); pintarAnomalias(); pintarControlCajas();
+  } catch {}
+}
+
+function costeTotal(an) {
+  const f = an?.coste?.filas || [];
+  const c = sum(f, x => x.coste), b = sum(f, x => x.base);
+  return b ? c / b * 100 : null;
+}
+
+function pintarObjetivo() {
+  const o = estado.an?.objetivo, card = $("#card-objetivo");
+  card.hidden = !o || !o.filas.length || estado.local === "Obrador";
+  if (card.hidden) return;
+  const [y, m] = o.mes.split("-").map(Number);
+  $("#obj-titulo").textContent = `Objetivo de ${MESES_LARGO[m - 1]}`;
+  $("#obj-sub").textContent = `Día ${o.dia} de ${o.dias_mes}. Objetivo = ${MESES_LARGO[m - 1]} de ${y - 1} × (1 + subida media de los últimos 12 meses). La raya marca dónde deberías ir hoy; la previsión sigue el ritmo frente al año pasado.`;
+  const filas = [...o.filas];
+  if (filas.length > 1) {
+    const t = { local: "Total", objetivo: sum(filas, f => f.objetivo), actual: sum(filas, f => f.actual), anterior_mes: sum(filas, f => f.anterior_mes),
+      anterior_a_fecha: sum(filas, f => f.anterior_a_fecha), prevision: filas.every(f => f.prevision != null) ? sum(filas, f => f.prevision) : null };
+    t.subida_media = t.anterior_mes ? (t.objetivo / t.anterior_mes - 1) * 100 : 0;
+    filas.unshift(t);
+  }
+  $("#objetivo").innerHTML = filas.map(f => {
+    const avance = f.objetivo ? f.actual / f.objetivo : 0;
+    const debido = f.objetivo ? f.anterior_a_fecha * (1 + f.subida_media / 100) / f.objetivo : 0;
+    const prev = f.prevision != null ? `previsión ${eur(f.prevision)} ${delta(f.prevision, f.objetivo)}` : "";
+    return `<div class="fila"><div class="nom">${esc(f.local)}</div><div class="der num">${eur(f.actual)} <span style="color:var(--muted);font-weight:500">/ ${eur(f.objetivo)}</span></div>
+      <div class="barra"><span style="width:${Math.min(100, avance * 100)}%"></span><em style="left:${Math.min(100, debido * 100)}%"></em></div>
+      <div class="det num"><span>${pct(avance * 100, 0)} del objetivo</span><span>subida media ${f.subida_media > 0 ? "+" : ""}${pct(f.subida_media)}</span><span>${prev}</span></div></div>`;
+  }).join("");
+}
+
+function pintarAnalisis() {
+  const an = estado.an, anC = estado.anC; if (!an) return;
+  // --- ventas y personal por hora ---
+  const areas = ["Todas", ...new Set(an.por_hora.filas.map(f => f.area))];
+  if (!areas.includes(estado.phArea)) estado.phArea = "Todas";
+  $("#ph-areas").innerHTML = areas.map(a => `<button data-area="${esc(a)}" aria-pressed="${a === estado.phArea}">${esc(a)}</button>`).join("");
+  const porHora = (d) => {
+    const r = {};
+    d.por_hora.filas.filter(f => estado.phArea === "Todas" || f.area === estado.phArea).forEach(f => {
+      const x = r[f.hora] ||= { ventas: 0, docs: 0, horas: 0 }; x.ventas += f.ventas; x.docs += f.docs; x.horas += f.horas; });
+    return r;
+  };
+  const hA = porHora(an), hC = porHora(anC), dias = an.por_hora.dias || 1;
+  const horasDia = Object.keys(hA).map(Number).filter(h => hA[h].ventas > 0 || hA[h].horas > 0.5 * dias).sort((a, b) => a - b);
+  const media = sum(horasDia, h => hA[h].ventas) / Math.max(1, sum(horasDia, h => hA[h].horas));
+  barras($("#ch-ph"), horasDia.map(h => ({ label: `${h}:00 – ${h + 1}:00`, corta: `${h}`, v: hA[h].horas ? hA[h].ventas / hA[h].horas : 0,
+    c: hC[h]?.horas ? hC[h].ventas / hC[h].horas : 0, extra: `${fmtN1.format(hA[h].horas / dias)} personas · ${eur(hA[h].ventas / dias)} de media` })),
+    { fmt: x => `${fmtEur2.format(x)}/h`, alto: 170, nombreA: "Por persona", nombreC: "Comparación" });
+  $("#tabla-ph").innerHTML = `<tr><th>Hora</th><th>Venta media</th><th>Personas</th><th>€/persona·h</th><th>Tickets/persona·h</th></tr>` +
+    horasDia.map(h => { const x = hA[h], e = x.horas ? x.ventas / x.horas : 0;
+      return `<tr class="${x.horas && e < media * 0.5 ? "baja" : ""}"><td>${h}:00</td><td>${eur(x.ventas / dias)}</td><td>${fmtN1.format(x.horas / dias)}</td>
+        <td>${x.horas ? fmtEur2.format(e) : "—"}</td><td>${x.horas ? fmtN1.format(x.docs / x.horas) : "—"}</td></tr>`; }).join("") +
+    `<tr><td colspan="5" style="text-align:left;color:var(--muted);font-size:12px">En naranja, horas con menos de la mitad de la venta por persona media del periodo (${fmtEur2.format(media)}/h). ${dias} días con venta.</td></tr>`;
+
+  // --- mapa de calor ---
+  const mp = an.mapa, max = Math.max(1, ...mp.map(x => x.ventas));
+  const hs = [...new Set(mp.filter(x => x.ventas > max * 0.02).map(x => x.hora))].sort((a, b) => a - b);
+  const val = {}; mp.forEach(x => { val[`${x.dow}|${x.hora}`] = x; });
+  $("#mapa").innerHTML = hs.length ? `<table><tr><th></th>${hs.map(h => `<th>${h}</th>`).join("")}</tr>` + [1, 2, 3, 4, 5, 6, 0].map(w =>
+    `<tr><th style="text-align:right">${DIAS[w]}</th>${hs.map(h => { const x = val[`${w}|${h}`], v = x ? x.ventas : 0;
+      const i = v ? Math.min(6, Math.floor(v / max * 7)) : -1;
+      return `<td title="${DIAS_LARGO[w]} ${h}:00 · ${eur(v)} de media · ${fmtN.format(x ? x.docs : 0)} tickets" style="background:${i < 0 ? "var(--surface-2)" : RAMPA[i]};color:${i >= 3 ? "#fff" : "#0b0b0b"}">${v ? ejeTxt(v) : ""}</td>`; }).join("")}</tr>`).join("") + `</table>` : `<div class="vacio">Sin datos por hora.</div>`;
+
+  // --- franjas ---
+  const fr = (d) => { const r = {}; d.franjas.forEach(f => { const x = r[f.franja] ||= { ventas: 0, docs: 0 }; x.ventas += f.ventas; x.docs += f.docs; }); return r; };
+  const fA = fr(an), fC = fr(anC), nombres = ["Desayuno", "Mediodía", "Tarde"], totalV = sum(nombres, n => fA[n]?.ventas || 0);
+  $("#franjas").innerHTML = nombres.map(n => { const a = fA[n] || { ventas: 0, docs: 0 }, c = fC[n] || { ventas: 0, docs: 0 };
+    const t = a.docs ? a.ventas / a.docs : 0, tc = c.docs ? c.ventas / c.docs : 0;
+    return `<div class="kpi"><div class="lbl">${n}</div><div class="val num">${fmtEur2.format(t)}</div><div class="cmp num">${delta(t, tc)} ${fmtEur2.format(tc)}</div>
+      <div class="cmp num">${pct(totalV ? a.ventas / totalV * 100 : 0, 0)} de la venta</div></div>`; }).join("");
+  const meses = [...new Set(an.franjas.map(f => f.mes))];
+  $("#tabla-franjas").innerHTML = meses.length > 1 ? `<tr><th>Mes</th>${nombres.map(n => `<th>${n}</th>`).join("")}</tr>` + meses.map(m =>
+    `<tr><td>${MESES[Number(m.slice(5)) - 1]} ${m.slice(0, 4)}</td>${nombres.map(n => { const f = an.franjas.find(x => x.mes === m && x.franja === n); return `<td>${f ? fmtEur2.format(f.ticket) : "—"}</td>`; }).join("")}</tr>`).join("") : "";
+
+  // --- peso de cada área ---
+  const peso = (d) => { const r = {}; d.ventas.forEach(v => { const x = r[v.local] ||= {}; x[v.area] = (x[v.area] || 0) + v.neto; }); return r; };
+  const pA = peso(estado.act), pC = peso(estado.cmp), ordenAreas = ["Cafetería", "Tienda", "Charcutería"];
+  $("#ley-areas").innerHTML = ordenAreas.map(a => `<span><i style="background:${COLOR_AREA[a]}"></i>${a}</span>`).join("");
+  const filasPeso = Object.keys(pA).sort((a, b) => sum(Object.values(pA[b])) - sum(Object.values(pA[a])));
+  $("#peso-areas").innerHTML = filasPeso.map(l => { const t = sum(Object.values(pA[l])), tc = sum(Object.values(pC[l] || {}));
+    const as = ordenAreas.filter(a => pA[l][a]);
+    return `<div class="fila"><div class="nom">${esc(l)}</div><div class="der num">${eur(t)}</div>
+      <div class="pila" style="grid-column:1/-1">${as.map(a => `<span style="width:${pA[l][a] / t * 100}%;background:${COLOR_AREA[a]}" title="${a}"></span>`).join("")}</div>
+      <div class="det num">${as.map(a => `<span>${a} ${pct(pA[l][a] / t * 100, 1)} ${pp(pA[l][a] / t * 100, tc && pC[l][a] != null ? pC[l][a] / tc * 100 : null)}</span>`).join("")}</div></div>`; }).join("") || `<div class="vacio">Sin ventas.</div>`;
+
+  // --- coste de personal ---
+  const cf = an.coste.filas, cc = {}; (anC.coste.filas || []).forEach(x => { cc[`${x.local}|${x.area}`] = x; });
+  $("#coste-sub").textContent = an.coste.ultimo
+    ? `Horas fichadas × coste por hora de cada área en su trimestre (sueldos + gratificaciones + seguridad social del Excel ÷ horas fichadas); el Excel llega hasta ${an.coste.ultimo} y después se usa ese coste por hora. Porcentaje sobre ventas sin IVA.`
+    : "Sube el Excel de explotación (abajo) para calcular el coste de personal.";
+  const locs = [...new Set(cf.map(x => x.local))];
+  $("#tabla-coste").innerHTML = cf.length ? `<tr><th>Local · área</th><th>Horas</th><th class="opc">€/h</th><th>Coste</th><th class="opc">Ventas s/IVA</th><th>% coste</th></tr>` + locs.map(l => {
+    const fs = cf.filter(x => x.local === l), tc = sum(fs, x => x.coste), tb = sum(fs, x => x.base), th = sum(fs, x => x.horas);
+    const fsC = (anC.coste.filas || []).filter(x => x.local === l), pC = sum(fsC, x => x.base) ? sum(fsC, x => x.coste) / sum(fsC, x => x.base) * 100 : null;
+    return `<tr style="font-weight:650"><td>${esc(l)}</td><td>${fmtN.format(th)}</td><td class="opc">${th ? fmtEur2.format(tc / th) : "—"}</td><td>${eur(tc)}</td><td class="opc">${eur(tb)}</td><td>${tb ? pct(tc / tb * 100) : "—"} ${delta(tb ? tc / tb : 0, pC != null ? pC / 100 : null, true)}</td></tr>` +
+      fs.map(x => { const c = cc[`${x.local}|${x.area}`];
+        return `<tr><td style="padding-left:12px">${esc(x.area)}</td><td>${fmtN.format(x.horas)}</td><td class="opc">${x.eur_h ? fmtEur2.format(x.eur_h) : "—"}</td><td>${eur(x.coste)}</td><td class="opc">${eur(x.base)}</td>
+          <td>${x.pct != null ? pct(x.pct) : "—"} ${x.pct != null && c?.pct != null ? delta(x.pct, c.pct, true) : ""}</td></tr>`; }).join("");
+  }).join("") : "";
+
+  // --- cuenta de explotación ---
+  const mg = an.margen;
+  $("#tabla-margen").innerHTML = mg.length ? `<tr><th>Trimestre · local · área</th><th class="opc">Ventas</th><th>Margen bruto</th><th>Personal</th><th class="opc">Res. directo</th><th>Res. total</th></tr>` +
+    mg.map(x => `<tr><td>${x.trimestre} · ${esc(x.local)} · ${esc(x.area)}</td><td class="opc">${eur(x.ventas)}</td><td>${pct(x.margen_pct)}</td><td>${pct(x.personal_pct)}</td>
+      <td class="opc">${eur(x.resultado_directo)}</td><td style="color:${x.resultado_total < 0 ? "var(--bad)" : "inherit"}">${eur(x.resultado_total)}</td></tr>`).join("")
+    : `<tr><td class="vacio">Sin datos del Excel de explotación.</td></tr>`;
+}
+
+$("#ph-areas").addEventListener("click", e => { const b = e.target.closest("[data-area]"); if (!b) return; estado.phArea = b.dataset.area; pintarAnalisis(); });
+$("#subir-excel").onclick = () => $("#fichero-excel").click();
+$("#fichero-excel").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  $("#subir-msg").textContent = "Subiendo…";
+  try {
+    const r = await api("/api/explotacion", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: f });
+    const j = await r.json();
+    $("#subir-msg").textContent = r.ok ? `Listo: ${j.filas} datos, de ${j.desde} a ${j.hasta}.` : (j.error || "No se ha podido subir.");
+    if (r.ok) cargar();
+  } catch { $("#subir-msg").textContent = "No se ha podido subir."; }
+  e.target.value = "";
+};
+
+function pintarAnomalias() {
+  const lista = estado.an?.anomalias || [];
+  $("#anomalias").innerHTML = lista.length ? lista.slice(0, estado.anomLimite).map(a => `<div class="fila"><div class="nom">${esc(a.empleado)}</div><div class="der num">${horasTxt(a.horas)}</div>
+    <div class="det num"><span>${esc(fechaCorta(a.dia))} · ${esc(a.inicio.slice(11, 16))}–${esc((a.fin || "").slice(11, 16) || "?")}</span><span>${esc(a.local)}</span>
+    ${a.motivos.map(m => `<span class="aviso">⚠ ${esc(m)}</span>`).join("")}</div></div>`).join("") : `<div class="vacio">Nada que revisar en este periodo.</div>`;
+  $("#anom-mas").hidden = lista.length <= estado.anomLimite;
+}
+$("#anom-mas").onclick = () => { estado.anomLimite += 50; pintarAnomalias(); };
+
+function pintarControlCajas() {
+  const cs = estado.an?.cajas || [];
+  $("#control-cajas").innerHTML = cs.length ? cs.map(c => `<div class="fila"><div class="nom">${esc(c.local)} · ${esc(c.caja)}</div><div class="der num">${eur(c.ventas)}</div>
+    <div class="det num"><span>efectivo ${pct(c.pct_efectivo, 0)}</span><span>${c.z} Z</span>${c.vacios ? `<span>${c.vacios} vacío${c.vacios > 1 ? "s" : ""}</span>` : ""}
+    ${c.faltan.length ? `<span class="aviso">⚠ sin Z: ${c.faltan.slice(-8).map(d => fechaCorta(d)).join(", ")}${c.faltan.length > 8 ? "…" : ""}</span>` : ""}</div></div>`).join("") : `<div class="vacio">Sin cierres en este periodo.</div>`;
+}
 
 function pintarCierres(act) {
   const n = entre(act.desde, act.hasta) + 1;

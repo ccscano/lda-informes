@@ -27,6 +27,8 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import analisis
+import explotacion
 import historico
 import plantilla
 import presencia as base
@@ -192,22 +194,28 @@ def datos(desde, hasta, local=None, corte=None):
                         "area": max(p["areas"], key=p["areas"].get)}
                        for p in personal.values()), key=lambda p: -p["horas"])
 
-    if cortar:
-        suma = {}
-        filas = con.execute(
-            f"SELECT dia, local, articulo, SUM(uds) uds, SUM(venta) venta FROM productos "
-            f"WHERE dia BETWEEN ? AND ? {filtro} GROUP BY dia = ?, local, articulo", [d0, d1, *args, d1])
-        for r in filas:
-            f = proporcion.get(r["local"], 0) if r["dia"] == d1 else 1
-            a = suma.setdefault(r["articulo"], [0, 0])
-            a[0] += r["uds"] * f
-            a[1] += r["venta"] * f
-        productos = sorted(({"articulo": k, "uds": u, "venta": v} for k, (u, v) in suma.items()),
-                           key=lambda p: -p["venta"])[:1000]
-    else:
-        productos = [dict(r) for r in con.execute(
-            f"SELECT articulo, SUM(uds) uds, SUM(venta) venta FROM productos WHERE dia BETWEEN ? AND ? {filtro} "
-            f"GROUP BY articulo ORDER BY venta DESC LIMIT 1000", [d0, d1, *args])]
+    # Ventas por artículo (con el último día en proporción si hay corte) y, de ahí, por familia
+    suma = {}
+    filas = con.execute(
+        f"SELECT dia = ? ultimo, local, articulo, SUM(uds) uds, SUM(venta) venta FROM productos "
+        f"WHERE dia BETWEEN ? AND ? {filtro} GROUP BY ultimo, local, articulo", [d1, d0, d1, *args])
+    for r in filas:
+        f = proporcion.get(r["local"], 0) if (cortar and r["ultimo"]) else 1
+        x = suma.setdefault(r["articulo"], [0, 0])
+        x[0] += r["uds"] * f
+        x[1] += r["venta"] * f
+    familia = dict(con.execute("SELECT articulo, familia FROM familias")) if con.execute(
+        "SELECT 1 FROM sqlite_master WHERE name = 'familias'").fetchone() else {}
+    productos = sorted(({"articulo": k, "uds": u, "venta": v, "familia": familia.get(k, "Sin familia")}
+                        for k, (u, v) in suma.items()), key=lambda p: -p["venta"])
+    familias = {}
+    for p in productos:
+        x = familias.setdefault(p["familia"], {"familia": p["familia"], "uds": 0, "venta": 0, "articulos": 0})
+        x["uds"] += p["uds"]
+        x["venta"] += p["venta"]
+        x["articulos"] += 1
+    familias = sorted(familias.values(), key=lambda x: -x["venta"])
+    productos = productos[:1000]
 
     cierres = []
     if (hasta - desde).days < MAX_DIAS_CIERRES:
@@ -222,7 +230,7 @@ def datos(desde, hasta, local=None, corte=None):
     con.close()
     return {"desde": d0, "hasta": d1, "local": local, "corte": corte.strftime("%H:%M") if corte else None,
             "ventas": ventas, "horas": horas,
-            "personal": personal, "productos": productos, "cierres": cierres,
+            "personal": personal, "productos": productos, "familias": familias, "cierres": cierres,
             "locales": locales, "actualizado": actualizado, "primer_dia": primer_dia}
 
 
@@ -304,6 +312,17 @@ class Manejador(http.server.BaseHTTPRequestHandler):
             res = datos(desde, hasta, (q.get("local") or [None])[0], corte)
             res["directo"] = en_directo
             return self.responder(200, res)
+        if url.path == "/api/analisis":
+            if not self.sesion_valida():
+                return self.responder(401, {"error": "sesion"})
+            q = urllib.parse.parse_qs(url.query)
+            try:
+                desde = dt.date.fromisoformat(q["desde"][0]).isoformat()
+                hasta = dt.date.fromisoformat(q["hasta"][0]).isoformat()
+            except (KeyError, ValueError):
+                return self.responder(400, {"error": "fechas"})
+            with sqlite3.connect(f"file:{historico.DB}?mode=ro", uri=True) as con:
+                return self.responder(200, analisis.todo(con, desde, hasta, (q.get("local") or [None])[0]))
         if url.path == "/api/plantilla":
             if not self.sesion_valida():
                 return self.responder(401, {"error": "sesion"})
@@ -322,6 +341,22 @@ class Manejador(http.server.BaseHTTPRequestHandler):
         self.responder(200, fichero.read_bytes(), TIPOS.get(fichero.suffix, "application/octet-stream"))
 
     def do_POST(self):
+        if self.path == "/api/explotacion":
+            if not self.sesion_valida():
+                return self.responder(401, {"error": "sesion"})
+            largo = int(self.headers.get("Content-Length") or 0)
+            if not 0 < largo <= 20 * 1024 * 1024:
+                return self.responder(400, {"error": "tamaño"})
+            destino = DIR / "datos" / "explotacion.xlsx"
+            temporal = destino.with_suffix(".subida")
+            temporal.write_bytes(self.rfile.read(largo))
+            try:
+                res = explotacion.importar(temporal)
+            except Exception as e:
+                temporal.unlink(missing_ok=True)
+                return self.responder(400, {"error": f"No se ha podido leer el Excel: {str(e)[:150]}"})
+            temporal.replace(destino)
+            return self.responder(200, {"ok": True, **res})
         largo = min(int(self.headers.get("Content-Length") or 0), 1000)
         try:
             cuerpo = json.loads(self.rfile.read(largo) or b"{}")

@@ -1,0 +1,8 @@
+[Unit]
+Description=Avisos de ventas cada hora de 10:40 a 21:40
+
+[Timer]
+OnCalendar=*-*-* 10..21:40:00
+
+[Install]
+WantedBy=timers.target

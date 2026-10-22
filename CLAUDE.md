@@ -46,6 +46,20 @@ Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladul
   de presencia «NOMBRE INICIALES» (iniciales de los dos apellidos) dentro del mismo local.
   Fuera de ventas: Obrador, Oficina Central y Opera Prima (`NO_SON_LOCALES` en app.py); el Obrador sí
   sale en Personal. Sótano Paseo se suma a Cafetería Paseo y Bollería a Tienda Paseo (`ventas.FUSIONAR`).
+- Excel de explotación (`explotacion.py`, tabla `explotacion`): cuenta de explotación por trimestre,
+  local y área (CONFITERIA = Tienda; CENTRO = Paseo). Se sube desde la app (Análisis → Cuenta de
+  explotación) o con `python3 explotacion.py fichero.xlsx`; cada año que trae se reemplaza entero.
+  Las ventas del Excel van sin IVA: la app guarda también la base imponible (`ventas.base`).
+- Indicadores (`analisis.py`, `/api/analisis`): ventas y personas por hora (tramos fichados), mapa de
+  calor, ticket medio por franja (desayuno <12, mediodía 12-16, tarde ≥16), coste de personal
+  (horas × €/h del trimestre = sueldos+gratificaciones+SS ÷ horas fichadas; % sobre base sin IVA),
+  margen bruto como la hoja «Ratios» (resta también «Otras Secciones»), objetivo del mes
+  (mismo mes del año anterior × (1 + subida media de los últimos 12 meses)), fichajes a revisar
+  (olvidos, turnos > 12 h, local distinto del habitual) y control de cajas (Z que faltan, vacíos,
+  % efectivo; el Z de madrugada o mañana cuenta para el día anterior).
+- Familias de artículo: atributo 1465 de HiOffice → tabla `familias` (artículo → familia).
+- `avisos.py` (avisos.timer, cada hora 10:40-21:40): si un local va ≥25 % por debajo del mismo día
+  de la semana pasada a la misma hora, avisa en privado a TELEGRAM_USUARIOS (no al canal).
 - Acceso: código de 6 cifras que el bot manda por Telegram a `TELEGRAM_USUARIOS`; la sesión
   (cookie de un año) se guarda en `datos/sesiones.json`.
 - Tras cambiar `app.py`: `systemctl --user restart app.service`. Si se cambia algo de `app/`,

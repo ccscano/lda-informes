@@ -1,5 +1,5 @@
 // Guarda la web para que abra al instante; los datos (/api) siempre van a la red.
-const CACHE = "lda-v10";
+const CACHE = "lda-v13";
 const SHELL = ["/", "/manifest.webmanifest", "/icono.svg", "/icono-180.png", "/icono-192.png"];
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener("activate", e => e.waitUntil(

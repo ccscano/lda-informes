@@ -78,6 +78,30 @@ def ventas_horas(token, dia):
     return [{"estab": e, "hora": h, "neto": n, "docs": d} for (e, h), (n, d) in suma.items()]
 
 
+COLUMNAS_FAMILIA = [
+    ("Artículo", "String", "Attribute", {"attributeId": 2}, 1, 2, 1),
+    ("Subartículo", "String", "Attribute", {"attributeId": 1555}, 2, 11, 1),
+    ("Familia", "String", "Attribute", {"attributeId": 1465}, 3, 96, 1),
+    ("Neto", "BigDecimal", "Metric", {"metricId": 1357}, 4, 5, 1),
+]
+
+
+def familias(token, desde, hasta):
+    """{artículo: familia} de lo vendido entre esas fechas, con el mismo nombre de artículo que
+    productos.articulos_dia («Nombre (subartículo)»)."""
+    datos = consulta(token, COLUMNAS_FAMILIA, desde, hasta, limite=50000)
+    res = {}
+    for fila in datos.get("rows") or []:
+        _, art, sub, familia = fila[:4]
+        if not art or not familia:
+            continue
+        nombre = art.strip().title()
+        if sub and sub.strip():
+            nombre += f" ({sub.strip().lower()})"
+        res[nombre] = familia.strip().capitalize()
+    return res
+
+
 def ventas_empleados(token, dia):
     """[{estab, empleado, neto, docs}] del día: quién cobra en cada caja. Los empleados M-/T- son
     subcódigos de PDA (mañana/tarde) de un trabajador, no personas: se resuelven en la app."""
@@ -158,15 +182,16 @@ def ventas_dia(token, dia, hasta=None):
         datos = json.load(r)
     tiendas = {}
     for fila in datos.get("rows") or []:
-        _, _cod, nombre, uds, _base, _imp, neto, docs = fila[:8]
+        _, _cod, nombre, uds, base_imp, _imp, neto, docs = fila[:8]
         if nombre:
-            tiendas[nombre] = {"neto": float(neto or 0), "docs": float(docs or 0), "uds": float(uds or 0)}
+            tiendas[nombre] = {"neto": float(neto or 0), "docs": float(docs or 0), "uds": float(uds or 0),
+                               "base": float(base_imp or 0)}
     # Bollería Paseo va con Tienda Paseo y Sótano Paseo con Cafetería Paseo (FUSIONAR)
     for alias, destino in FUSIONAR.items():
         src = next((k for k in tiendas if k.strip() == alias), None)
         if src:
             t = tiendas.pop(src)
-            d = tiendas.setdefault(destino, {"neto": 0, "docs": 0, "uds": 0})
+            d = tiendas.setdefault(destino, {"neto": 0, "docs": 0, "uds": 0, "base": 0})
             for k in d:
                 d[k] += t[k]
     tot = datos.get("totalsRow") or []

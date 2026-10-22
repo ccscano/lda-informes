@@ -36,7 +36,7 @@ PAUSA = 0.3            # segundos entre consultas, para no cargar HiOffice
 
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS ventas (
-    dia TEXT, estab TEXT, local TEXT, grupo TEXT, neto REAL, docs REAL, uds REAL,
+    dia TEXT, estab TEXT, local TEXT, grupo TEXT, neto REAL, docs REAL, uds REAL, base REAL,
     PRIMARY KEY (dia, estab));
 CREATE TABLE IF NOT EXISTS ventas_hora (
     dia TEXT, estab TEXT, local TEXT, grupo TEXT, hora INTEGER, neto REAL, docs REAL,
@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS ventas_hora (
 CREATE TABLE IF NOT EXISTS ventas_empleado (
     dia TEXT, estab TEXT, local TEXT, empleado TEXT, neto REAL, docs REAL,
     PRIMARY KEY (dia, estab, empleado));
+CREATE TABLE IF NOT EXISTS familias (articulo TEXT PRIMARY KEY, familia TEXT);
 CREATE TABLE IF NOT EXISTS productos (
     dia TEXT, estab TEXT, local TEXT, articulo TEXT, uds REAL, venta REAL, docs REAL,
     PRIMARY KEY (dia, estab, articulo));
@@ -65,6 +66,9 @@ def conectar():
     DB.parent.mkdir(exist_ok=True)
     con = sqlite3.connect(DB, timeout=120)   # la app lee a la vez; se espera si está ocupada
     con.executescript(ESQUEMA)
+    # Columnas añadidas después de crear la tabla
+    if "base" not in [c[1] for c in con.execute("PRAGMA table_info(ventas)")]:
+        con.execute("ALTER TABLE ventas ADD COLUMN base REAL")
     return con
 
 
@@ -95,15 +99,16 @@ sesion = {"token": None}
 
 def reintentar(fn, token, *args):
     """Llama a fn(token, *args). HiOffice da 500 de vez en cuando y 401 si otro proceso ha
-    hecho login: tres intentos (con login nuevo tras un 401) antes de rendirse con ese día."""
-    for intento in range(3):
+    hecho login: cinco intentos (con login nuevo tras un 401) antes de rendirse con ese día."""
+    for intento in range(5):
         try:
             return fn(sesion["token"] or token, *args)
         except Exception as e:
-            if intento == 2:
+            if intento == 4:
                 raise
             print(f"  {fn.__name__} falló ({str(e)[:80]}); reintento", file=sys.stderr, flush=True)
             if isinstance(e, urllib.error.HTTPError) and e.code == 401:
+                time.sleep(5 * intento)   # si otro proceso está entrando a la vez, se le deja terminar
                 sesion["token"] = base.login(base.cargar_env())
             else:
                 time.sleep(10)
@@ -113,9 +118,9 @@ def cargar_ventas(con, token, desde, hasta):
     for d in dias(desde, hasta):
         tiendas, _ = reintentar(ventas.ventas_dia, token, d)
         con.execute("DELETE FROM ventas WHERE dia = ?", (d.isoformat(),))
-        con.executemany("INSERT INTO ventas VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        [(d.isoformat(), n.strip(), ventas.local(n), ventas.grupo(n), t["neto"], t["docs"], t["uds"])
-                         for n, t in tiendas.items()])
+        con.executemany("INSERT INTO ventas VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        [(d.isoformat(), n.strip(), ventas.local(n), ventas.grupo(n), t["neto"], t["docs"], t["uds"],
+                          t["base"]) for n, t in tiendas.items()])
         marcar(con, "ventas", d)
         con.commit()
         time.sleep(PAUSA)
@@ -142,6 +147,20 @@ def cargar_ventas_empleado(con, token, desde, hasta):
                          for f in filas])
         marcar(con, "ventas_empleado", d)
         con.commit()
+        time.sleep(PAUSA)
+
+
+def cargar_familias(con, token, desde, hasta):
+    """Familia de cada artículo vendido en el rango (una sola consulta por bloques de 90 días)."""
+    d = desde
+    while d <= hasta:
+        fin = min(d + dt.timedelta(days=89), hasta)
+        mapa = reintentar(ventas.familias, token, d, fin)
+        con.executemany("INSERT OR REPLACE INTO familias VALUES (?, ?)", mapa.items())
+        for x in dias(d, fin):
+            marcar(con, "familias", x)
+        con.commit()
+        d = fin + dt.timedelta(days=1)
         time.sleep(PAUSA)
 
 
@@ -189,7 +208,7 @@ def cargar_cierres(con, token, desde, hasta):
 
 
 CARGAS = {"ventas": cargar_ventas, "ventas_hora": cargar_ventas_hora,
-          "ventas_empleado": cargar_ventas_empleado, "productos": cargar_productos,
+          "ventas_empleado": cargar_ventas_empleado, "familias": cargar_familias, "productos": cargar_productos,
           "fichajes": cargar_fichajes, "cierres": cargar_cierres}
 
 
