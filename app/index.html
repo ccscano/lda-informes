@@ -238,7 +238,7 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
   <section class="vista" id="v-personal">
     <div class="card"><h2>Horas por local y área</h2><p class="sub">Fichajes cerrados. Los olvidos de salida se estiman hasta la última salida del local ese día.</p><div class="filas" id="horas-local"></div></div>
     <div class="card"><h2>Personas</h2><p class="sub">Horas de fichajes completos. Los olvidos de salida se cuentan aparte.</p><div class="filas" id="personal"></div></div>
-    <div class="card"><h2>Área de cada persona</h2><p class="sub">Todos fichan en el TPV de la tienda, así que el área se propone según dónde cobra cada uno (últimos 90 días, uniendo los subcódigos M-/T- de la PDA). Cámbiala si no es correcta: se guarda y se aplica a todas las horas.</p><div id="plantilla"><div class="vacio">Cargando…</div></div></div>
+    <div class="card"><h2>Área de cada persona</h2><p class="sub">Quien ha fichado en el periodo elegido. Todos fichan en el TPV de la tienda, así que el área se propuso según dónde cobra cada uno (uniendo los subcódigos M-/T- de la PDA) y quedó fijada. Cámbiala si no es correcta: se aplica a todas sus horas. Quien no cobra nunca sale arriba, sin área.</p><div id="plantilla"><div class="vacio">Cargando…</div></div></div>
   </section>
 
   <section class="vista" id="v-cajas">
@@ -373,7 +373,7 @@ async function cargar() {
     pintarCabecera();
     rellenarLocales(act.locales);
     pintar();
-    if (!plantilla) cargarPlantilla(); else pintarPlantilla();
+    cargarPlantilla();
   } catch (e) {
     if (e.message !== "sesion") $("#periodo").textContent = "No se han podido cargar los datos. Prueba otra vez.";
   } finally {
@@ -755,7 +755,7 @@ function pintarPersonal(act, cmp) {
 let plantilla = null;
 async function cargarPlantilla() {
   try {
-    const r = await api("/api/plantilla");
+    const r = await api(`/api/plantilla?${new URLSearchParams({ desde: estado.ddesde, hasta: estado.dhasta })}`);
     if (r.ok) { plantilla = await r.json(); pintarPlantilla(); }
   } catch {}
 }
@@ -770,13 +770,13 @@ function pintarPlantilla() {
     if (p.local !== loc) { loc = p.local; html += `<div class="pl-local">${esc(loc)}</div>`; }
     const total = p.tickets || 0;
     const rep = Object.entries(p.reparto).sort((a, b) => b[1] - a[1]).map(([a, n]) => `${a} ${pc(n / total)}`).join(" · ");
-    const nota = p.origen === "tpv" ? "según el TPV donde ficha" : total ? `cobra: ${rep} (${fmtN.format(total)} tickets)` : "no cobra tickets";
+    const nota = `${horasTxt(p.horas)} en el periodo · ` + (p.origen === "tpv" ? "según el TPV donde ficha" : total ? `cobra: ${rep} (${fmtN.format(total)} tickets)` : "no cobra tickets");
     const opciones = [`<option value="">${p.propuesta ? `Propuesta: ${esc(p.propuesta)}` : "Sin asignar"}</option>`]
       .concat(plantilla.areas.map(a => `<option value="${esc(a)}"${p.manual === a ? " selected" : ""}>${esc(a)}</option>`)).join("");
     html += `<div class="pl-fila${p.manual ? " manual" : ""}"><div class="nom">${esc(p.empleado.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()))}<small>${esc(nota)}</small></div>
       ${p.origen === "tpv" && !p.manual ? `<span class="chip-area">${esc(p.area)}</span>` : `<select data-emp="${esc(p.empleado)}" aria-label="Área">${opciones}</select>`}</div>`;
   }
-  $("#plantilla").innerHTML = html || `<div class="vacio">Sin fichajes en los últimos 60 días.</div>`;
+  $("#plantilla").innerHTML = html || `<div class="vacio">Sin fichajes en este periodo.</div>`;
 }
 $("#plantilla").addEventListener("change", async e => {
   const sel = e.target.closest("select[data-emp]"); if (!sel) return;

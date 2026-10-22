@@ -115,13 +115,59 @@ def guardar_manual(empleado, area):
     return m
 
 
-def propuestas(con):
-    """{empleado: {local, propuesta, tickets, reparto: {área: tickets}}} y nombres de venta sin unir."""
-    candidatos = {}   # local → {nombre de presencia: días que fichó}; los subcódigos M-/T- no son personas
+# Propuestas y candidatos se recalculan solo cuando cambian las tablas (cada carga del histórico)
+_memoria = {}
+
+
+def _firma(con, tabla):
+    return con.execute(f"SELECT COUNT(*), MAX(dia) FROM {tabla}").fetchone()
+
+
+def _recordado(clave, firma, calcular):
+    if _memoria.get(clave, (None,))[0] != firma:
+        _memoria[clave] = (firma, calcular())
+    return _memoria[clave][1]
+
+
+def candidatos_por_local(con):
+    """local → {nombre de presencia: días que fichó}. Los subcódigos M-/T- no son personas."""
+    return _recordado("candidatos", _firma(con, "fichajes"), lambda: _candidatos(con))
+
+
+def _candidatos(con):
+    candidatos = {}
     for estab, emp, dia in con.execute("SELECT DISTINCT estab, empleado, dia FROM fichajes"):
         nombre = normal(emp)
         if not PDA.match(nombre):
             candidatos.setdefault(local_fichaje(estab), {}).setdefault(nombre, set()).add(dia)
+    return candidatos
+
+
+def identificador(con):
+    """Función (empleado, estab, día) → nombre de la persona real. A veces se ficha con el
+    subcódigo de PDA (M-/T-) en vez del usuario de presencia: se pasa a su trabajador."""
+    candidatos = candidatos_por_local(con)
+    cache = {}
+
+    def quien(empleado, estab, dia):
+        n = normal(empleado)
+        if not PDA.match(n):
+            return n
+        k = (n, local_fichaje(estab), dia)
+        if k not in cache:
+            cache[k] = resolver(n, dia, candidatos.get(k[1], {})) or n
+        return cache[k]
+    return quien
+
+
+def propuestas(con):
+    """{empleado: {local, propuesta, tickets, reparto: {área: tickets}}} y nombres de venta sin unir."""
+    firma = (_firma(con, "ventas_empleado"), _firma(con, "fichajes"))
+    return _recordado("propuestas", firma, lambda: _propuestas(con))
+
+
+def _propuestas(con):
+    candidatos = candidatos_por_local(con)
     ultimo = dict(con.execute("SELECT empleado, MAX(dia) FROM ventas_empleado GROUP BY empleado"))
     res, sin_unir = {}, {}
     filas = con.execute("SELECT dia, estab, local, empleado, docs FROM ventas_empleado")
@@ -147,12 +193,14 @@ def propuestas(con):
 
 
 def asignador(con):
-    """Función (empleado, estab del fichaje) → área, con manual > TPV del área > propuesta."""
+    """Función (empleado, estab del fichaje, día) → área, con manual > TPV del área > propuesta.
+    El empleado se pasa antes a la persona real (fichajes hechos con el subcódigo de PDA)."""
     manual = leer_manual()
     prop, _ = propuestas(con)
+    quien = identificador(con)
 
-    def area(empleado, estab):
-        nombre = normal(empleado)
+    def area(empleado, estab, dia=None):
+        nombre = quien(empleado, estab, dia) if dia else normal(empleado)
         return (area_fichaje(estab) or manual.get(nombre)
                 or (prop.get(nombre) or {}).get("propuesta") or SIN_AREA)
     return area
@@ -180,20 +228,22 @@ def horas_fichajes(filas):
     return res
 
 
-def resumen(con, desde):
-    """Para la pantalla de plantilla: cada persona que ha fichado desde `desde` con su local,
-    área efectiva y de dónde sale (manual, TPV del área o propuesta por ventas)."""
+def resumen(con, desde, hasta):
+    """Para la pantalla de plantilla: cada persona que ha fichado entre `desde` y `hasta` con su
+    local, área efectiva y de dónde sale (manual, TPV del área o propuesta por ventas)."""
     manual = leer_manual()
     prop, sin_unir = propuestas(con)
+    quien = identificador(con)
     gente = {}
-    for estab, emp, n in con.execute(
-            "SELECT estab, empleado, COUNT(*) FROM fichajes WHERE dia >= ? GROUP BY estab, empleado", (desde,)):
-        nombre = normal(emp)
-        if PDA.match(nombre) or emp in base.NO_PLANTILLA:
+    for estab, emp, dia, horas in con.execute(
+            "SELECT estab, empleado, dia, horas FROM fichajes WHERE dia BETWEEN ? AND ?", (desde, hasta)):
+        if emp in base.NO_PLANTILLA or local_fichaje(estab) in ("Oficina Central", "Opera Prima"):
             continue
-        g = gente.setdefault(nombre, {"empleado": nombre, "locales": {}, "tpv": None})
+        nombre = quien(emp, estab, dia)
+        g = gente.setdefault(nombre, {"empleado": nombre, "locales": {}, "tpv": None, "horas": 0.0})
         loc = local_fichaje(estab)
-        g["locales"][loc] = g["locales"].get(loc, 0) + n
+        g["locales"][loc] = g["locales"].get(loc, 0) + 1
+        g["horas"] += min(horas or 0, base.MAX_HORAS)
         g["tpv"] = g["tpv"] or area_fichaje(estab)
     res = []
     for nombre, g in gente.items():
@@ -202,6 +252,6 @@ def resumen(con, desde):
             ("tpv", g["tpv"]) if g["tpv"] else ("propuesta", p.get("propuesta")) if p.get("propuesta") else (None, SIN_AREA)
         res.append({"empleado": nombre, "local": max(g["locales"], key=g["locales"].get), "area": area,
                     "origen": origen, "propuesta": p.get("propuesta"), "tickets": p.get("tickets", 0),
-                    "reparto": p.get("reparto", {}), "manual": manual.get(nombre)})
+                    "reparto": p.get("reparto", {}), "manual": manual.get(nombre), "horas": round(g["horas"], 1)})
     res.sort(key=lambda r: (r["local"], r["area"] != SIN_AREA, r["empleado"]))
     return {"personas": res, "areas": AREAS, "sin_unir": sorted(sin_unir.items(), key=lambda x: -x[1])[:15]}

@@ -164,20 +164,22 @@ def datos(desde, hasta, local=None, corte=None):
         loc = plantilla.local_fichaje(f["estab"])
         if loc in NO_SON_LOCALES or f["empleado"] in base.NO_PLANTILLA or (local and loc != local):
             continue
-        x = suma.setdefault((f["dia"], loc, area_de(f["empleado"], f["estab"])), [0.0, 0])
+        x = suma.setdefault((f["dia"], loc, area_de(f["empleado"], f["estab"], f["dia"])), [0.0, 0])
         x[0] += h
         x[1] += estimado
     horas = [{"dia": d, "local": l, "area": a, "horas": round(h, 2), "estimados": e}
              for (d, l, a), (h, e) in suma.items()]
 
+    quien = plantilla.identificador(con)
     personal = {}
     for f in fich:
         loc = local_fichaje(f["estab"])
         if local and loc != local:
             continue
-        p = personal.setdefault(f["empleado"], {"empleado": f["empleado"].title(), "horas": 0, "dias": set(),
-                                                "olvidos": 0, "locales": {}, "areas": {}})
-        a = area_de(f["empleado"], f["estab"])
+        nombre = quien(f["empleado"], f["estab"], f["dia"])
+        p = personal.setdefault(nombre, {"empleado": nombre.title(), "horas": 0, "dias": set(),
+                                         "olvidos": 0, "locales": {}, "areas": {}})
+        a = area_de(f["empleado"], f["estab"], f["dia"])
         p["areas"][a] = p["areas"].get(a, 0) + 1
         if base.es_olvido(f):
             p["olvidos"] += 1
@@ -305,9 +307,11 @@ class Manejador(http.server.BaseHTTPRequestHandler):
         if url.path == "/api/plantilla":
             if not self.sesion_valida():
                 return self.responder(401, {"error": "sesion"})
+            q = urllib.parse.parse_qs(url.query)
+            hasta = (q.get("hasta") or [dt.date.today().isoformat()])[0]
+            desde = (q.get("desde") or [(dt.date.today() - dt.timedelta(days=60)).isoformat()])[0]
             with sqlite3.connect(f"file:{historico.DB}?mode=ro", uri=True) as con:
-                desde = (dt.date.today() - dt.timedelta(days=60)).isoformat()
-                return self.responder(200, plantilla.resumen(con, desde))
+                return self.responder(200, plantilla.resumen(con, desde, hasta))
         if url.path == "/api/salir":
             return self.responder(200, {"ok": True},
                                   cabeceras=[("Set-Cookie", "lda=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict")])
