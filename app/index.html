@@ -252,7 +252,7 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
   <section class="vista" id="v-analisis">
     <div class="card"><h2>Ventas y personal por hora</h2><p class="sub" id="ph-sub">Media por día del periodo (días cerrados). Las personas salen de los tramos fichados de cada área.</p>
       <div class="chips-mini" id="ph-areas"></div>
-      <p class="sub" style="margin:0 0 4px">€ vendidos por persona trabajando, en cada hora</p><div class="chart" id="ch-ph"></div>
+      <p class="sub" id="ph-titulo" style="margin:0 0 4px">€ vendidos por persona trabajando, en cada hora</p><div class="chart" id="ch-ph"></div>
       <div class="tabla-scroll" style="margin-top:10px"><table class="tabla" id="tabla-ph"></table></div></div>
     <div class="card"><h2>Mapa de calor</h2><p class="sub">Venta media por día de la semana y hora. Más oscuro, más venta.</p><div class="mapa" id="mapa"></div></div>
     <div class="card"><h2>Ticket medio por franja</h2><p class="sub">Desayuno hasta las 12, mediodía de 12 a 16 y tarde desde las 16.</p><div class="franjas" id="franjas"></div><div class="tabla-scroll"><table class="tabla" id="tabla-franjas"></table></div></div>
@@ -956,16 +956,25 @@ function pintarAnalisis() {
     return r;
   };
   const hA = porHora(an), hC = porHora(anC), dias = an.por_hora.dias || 1;
+  // Solo hoy: los fichajes de hoy aún no están cerrados, así que las personas salen al cierre
+  const deHoy = an.desde === hoy() && an.hasta === hoy();
   const horasDia = Object.keys(hA).map(Number).filter(h => hA[h].ventas > 0 || hA[h].horas > 0.5 * dias).sort((a, b) => a - b);
   const media = sum(horasDia, h => hA[h].ventas) / Math.max(1, sum(horasDia, h => hA[h].horas));
-  barras($("#ch-ph"), horasDia.map(h => ({ label: `${h}:00 – ${h + 1}:00`, corta: `${h}`, v: hA[h].horas ? hA[h].ventas / hA[h].horas : 0,
-    c: hC[h]?.horas ? hC[h].ventas / hC[h].horas : 0, extra: `${fmtN1.format(hA[h].horas / dias)} personas · ${eur(hA[h].ventas / dias)} de media` })),
-    { fmt: x => `${fmtEur2.format(x)}/h`, alto: 170, nombreA: "Por persona", nombreC: "Comparación" });
+  $("#ph-titulo").textContent = deHoy ? "€ vendidos en cada hora (las personas, al cierre del día)" : "€ vendidos por persona trabajando, en cada hora";
+  barras($("#ch-ph"), horasDia.map(h => deHoy
+    ? { label: `${h}:00 – ${h + 1}:00`, corta: `${h}`, v: hA[h].ventas, c: hC[h]?.ventas || 0, extra: `${fmtN1.format(hA[h].docs)} tickets` }
+    : { label: `${h}:00 – ${h + 1}:00`, corta: `${h}`, v: hA[h].horas ? hA[h].ventas / hA[h].horas : 0,
+        c: hC[h]?.horas ? hC[h].ventas / hC[h].horas : 0, extra: `${fmtN1.format(hA[h].horas / dias)} personas · ${eur(hA[h].ventas / dias)} de media` }),
+    deHoy ? { fmt: eur, alto: 170, nombreA: "Hoy", nombreC: "Comparación" }
+          : { fmt: x => `${fmtEur2.format(x)}/h`, alto: 170, nombreA: "Por persona", nombreC: "Comparación" });
   $("#tabla-ph").innerHTML = `<tr><th>Hora</th><th>Venta media</th><th>Personas</th><th>€/persona·h</th><th>Tickets/persona·h</th></tr>` +
     horasDia.map(h => { const x = hA[h], e = x.horas ? x.ventas / x.horas : 0;
-      return `<tr class="${x.horas && e < media * 0.5 ? "baja" : ""}"><td>${h}:00</td><td>${eur(x.ventas / dias)}</td><td>${fmtN1.format(x.horas / dias)}</td>
+      return deHoy ? `<tr><td>${h}:00</td><td>${eur(x.ventas)}</td><td>…</td><td>…</td><td>…</td></tr>` :
+        `<tr class="${x.horas && e < media * 0.5 ? "baja" : ""}"><td>${h}:00</td><td>${eur(x.ventas / dias)}</td><td>${fmtN1.format(x.horas / dias)}</td>
         <td>${x.horas ? fmtEur2.format(e) : "—"}</td><td>${x.horas ? fmtN1.format(x.docs / x.horas) : "—"}</td></tr>`; }).join("") +
-    `<tr><td colspan="5" style="text-align:left;color:var(--muted);font-size:12px">En naranja, horas con menos de la mitad de la venta por persona media del periodo (${fmtEur2.format(media)}/h). ${dias} días con venta.</td></tr>`;
+    `<tr><td colspan="5" style="text-align:left;color:var(--muted);font-size:12px">${deHoy
+      ? "Hoy: HiOffice solo da los fichajes ya cerrados, así que las personas y el €/persona·h salen mañana (o elige un periodo con días cerrados)."
+      : `En naranja, horas con menos de la mitad de la venta por persona media del periodo (${fmtEur2.format(media)}/h). ${dias} días con venta.`}</td></tr>`;
 
   // --- mapa de calor ---
   const mp = an.mapa, max = Math.max(1, ...mp.map(x => x.ventas));

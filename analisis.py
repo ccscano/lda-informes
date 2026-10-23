@@ -73,8 +73,9 @@ def por_hora(con, desde, hasta, local):
         r = res.setdefault((area, hora), {"ventas": 0, "docs": 0, "horas": 0})
         r["ventas"] += neto
         r["docs"] += docs
+    hoy = dt.date.today().isoformat()      # HiOffice solo da fichajes cerrados: hoy está a medias
     for dia, loc, area, h, f, ini, fin, estimado in horas_por_dia(con):
-        if not (desde <= dia <= hasta) or (local and loc != local) or estimado:
+        if not (desde <= dia <= hasta) or dia >= hoy or (local and loc != local) or estimado:
             continue
         t = ini
         while t < fin:
