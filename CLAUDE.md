@@ -18,6 +18,7 @@ Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladul
 | 15:00 / 22:10 | `ventas.py` | Ventas del día: cafeterías, tiendas+charcutería, por local, total |
 | 15:05 / 22:15 | `productos.py` | Top 10 productos: empresa, por local, por establecimiento |
 | 23:00 | `cierres.py` | Cierres de caja (Z): caja, nº Z, hora, persona, importe, efectivo |
+| 09:00 | `cierres.py --repaso` | Solo si hace falta: Z del día anterior que llegaron tarde (venta corregida) o cajas aún sin cierre |
 | lunes 08:00 | `periodos.py --semana` | Ventas y top 10 de la semana, con importes de la anterior |
 | día 1 08:00 | `periodos.py --mes` | Ídem del mes |
 
@@ -91,6 +92,8 @@ Tras cambiar `bot_lda.py`: reiniciar `bot-lda.service`.
   (tramo que cruza de día o > 14 h). Se avisa una vez (`avisados.json`).
 - Ventas por establecimiento: 12 TPV. **Bollería Paseo se suma a Tienda Paseo** (misma caja,
   `ventas.FUSIONAR`). Un "local" agrupa cafetería + tienda (+ charcutería en Paseo): `ventas.local()`.
-- Cierres: nadie declara efectivo (declarado = 0), el descuadre no sirve. Torrecárdenas hace el Z
+- Cierres: nadie declara efectivo (declarado = 0), el descuadre no sirve. Algunos TPV (cafetería,
+  terraza y charcutería de Paseo el 22/10/2026) suben el Z a HiOffice horas después: de ahí el repaso
+  de las 09:00, que compara con lo enviado a las 23:00 (`datos/cierres_enviados.json`). Torrecárdenas hace el Z
   a la mañana siguiente.
 - Excluidos de presencia: SUPERVISOR, TECNICO SEISOFT, JAVIER CS. El Obrador no vende (fuera del €/h).

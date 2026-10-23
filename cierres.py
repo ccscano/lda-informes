@@ -8,7 +8,13 @@ y TPV: hora del cierre, quién lo hizo, venta, efectivo calculado y declarado,
 descuadre, retirado y fianza que queda. Avisa de los TPV que han cerrado otros
 días de la última semana y hoy aún no.
 
-Uso: cierres.py [AAAA-MM-DD] [--no-enviar]
+Algunos TPV (p. ej. los de la cafetería de Paseo) suben el Z a HiOffice horas
+después de hacerlo, así que a las 23:00 pueden faltar. Por eso se guardan los Z
+enviados (datos/cierres_enviados.json) y a las 09:00 `--repaso` revisa el día
+anterior: avisa solo si han llegado Z nuevos (con la venta corregida) o si alguna
+caja sigue sin cierre (contando los Z de esa mañana, como el de Torrecárdenas).
+
+Uso: cierres.py [AAAA-MM-DD] [--no-enviar] [--repaso]
 """
 import datetime as dt
 import json
@@ -22,6 +28,7 @@ import ventas
 
 DASHBOARD, BLOCK, DATASOURCES = 196, 52461, [{"id": 37}, {"id": 79}]
 DIAS_HISTORICO = 7      # días hacia atrás para saber qué TPV suelen cerrar
+ENVIADOS = Path(__file__).resolve().parent / "datos" / "cierres_enviados.json"
 # (nombre, tipo, origen, ids, posición, internalId)
 COLUMNAS = [
     ("Establecimiento", "String", "Attribute", {"attributeId": 1061}, 1, 11),
@@ -142,7 +149,52 @@ def mensaje(dia, de_hoy, historico):
     habituales = {(c["estab"], c["caja"]) for c in historico if c["venta"] > 0}
     pendientes = sorted(habituales - cerradas_hoy)
     if pendientes:
-        lineas += ["", "⏳ <b>Sin cierre hoy</b> (han cerrado otros días esta semana):"]
+        lineas += ["", "⏳ <b>Sin cierre en HiOffice a las 23:00</b> (cierran otros días; "
+                       "puede que aún no se haya subido, se revisa mañana a las 09:00):"]
+        lineas += [f"   • {ventas.local(e)} · {caja}" for e, caja in pendientes]
+    return "\n".join(lineas)
+
+
+def clave(c):
+    return f"{c['estab']}|{c['caja']}|{c['numero']}"
+
+
+def vacio(c):
+    return c["venta"] == 0 and c["calculado"] == 0 and c["retirado"] == 0
+
+
+def repaso(dia, todos, enviados):
+    """Mensaje del repaso de la mañana siguiente, o None si no hay nada que contar."""
+    del_dia = [c for c in todos if c["fecha"][:10] == dia.isoformat()]
+    # Z hechos la mañana siguiente (antes de las 12) cuentan para el día
+    manana = [c for c in todos if c["fecha"][:10] == (dia + dt.timedelta(days=1)).isoformat()
+              and c["fecha"][11:13] < "12"]
+    historico = [c for c in todos if c["fecha"][:10] < dia.isoformat()]
+    cerradas = {(c["estab"], c["caja"]) for c in del_dia + manana}
+    habituales = {(c["estab"], c["caja"]) for c in historico if c["venta"] > 0}
+    pendientes = sorted(habituales - cerradas)
+    nuevos = [] if enviados is None else [c for c in del_dia if clave(c) not in enviados and not vacio(c)]
+    nuevos += [c for c in manana if not vacio(c)]
+    if not nuevos and not pendientes:
+        return None
+    lineas = [f"🔁 <b>Repaso cierres {base.DIAS[dia.weekday()]} {dia:%d/%m}</b>"]
+    if nuevos:
+        lineas += ["", "Han llegado a HiOffice después del informe de las 23:00:"]
+        for c in sorted(nuevos, key=lambda c: c["fecha"]):
+            quien = c["empleado"].title().split()[0] if c["empleado"] else "—"
+            dia_z = "" if c["fecha"][:10] == dia.isoformat() else f"{c['fecha'][8:10]}/{c['fecha'][5:7]} "
+            lineas.append(f"   • {ventas.local(c['estab'])} · <b>{c['caja']}</b> · Z{c['numero']} · "
+                          f"{dia_z}{c['fecha'][11:16]} · {quien} · <b>{eur(c['venta'])}</b> · "
+                          f"efectivo {eur(c['efectivo'])}")
+        todos_dia = [c for c in del_dia + manana if not vacio(c)]
+        locales = sorted({ventas.local(c["estab"]) for c in nuevos})
+        corregida = [f"{loc} {eur(sum(c['venta'] for c in todos_dia if ventas.local(c['estab']) == loc))}"
+                     for loc in locales]
+        lineas += ["", f"💶 Venta corregida: {' · '.join(corregida)}",
+                   f"<b>TOTAL {len(todos_dia)} cierres</b> · venta {eur(sum(c['venta'] for c in todos_dia))}"
+                   f" · efectivo {eur(sum(c['efectivo'] for c in todos_dia))}"]
+    if pendientes:
+        lineas += ["", "⚠️ <b>Siguen sin cierre</b> (cierran otros días esta semana):"]
         lineas += [f"   • {ventas.local(e)} · {caja}" for e, caja in pendientes]
     return "\n".join(lineas)
 
@@ -150,8 +202,21 @@ def mensaje(dia, de_hoy, historico):
 def main():
     cfg = base.cargar_env()
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    dia = dt.date.fromisoformat(args[0]) if args else dt.date.today()
+    es_repaso = "--repaso" in sys.argv
+    hoy = dt.date.today()
+    dia = dt.date.fromisoformat(args[0]) if args else hoy - dt.timedelta(days=1 if es_repaso else 0)
+    guardados = json.loads(ENVIADOS.read_text()) if ENVIADOS.exists() else {}
     token = base.login(cfg)
+    if es_repaso:
+        todos = cierres(token, dia - dt.timedelta(days=DIAS_HISTORICO), dia + dt.timedelta(days=1))
+        texto = repaso(dia, todos, set(guardados[dia.isoformat()]) if dia.isoformat() in guardados else None)
+        if "--no-enviar" in sys.argv:
+            print(texto or "Repaso: nada que avisar.")
+            return
+        if texto:
+            base.telegram(cfg, texto)
+        print("Repaso enviado." if texto else "Repaso: nada que avisar.")
+        return
     todos = cierres(token, dia - dt.timedelta(days=DIAS_HISTORICO), dia)
     de_hoy = [c for c in todos if c["fecha"][:10] == dia.isoformat()]
     historico = [c for c in todos if c["fecha"][:10] != dia.isoformat()]
@@ -160,6 +225,10 @@ def main():
         print(texto)
         return
     base.telegram(cfg, texto)
+    limite = (dia - dt.timedelta(days=14)).isoformat()
+    guardados = {k: v for k, v in guardados.items() if k >= limite}
+    guardados[dia.isoformat()] = [clave(c) for c in de_hoy]
+    ENVIADOS.write_text(json.dumps(guardados, indent=1))
     print(f"Enviado: {len(de_hoy)} cierres.")
 
 
