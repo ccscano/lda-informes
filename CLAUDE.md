@@ -17,7 +17,7 @@ Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladul
 | 04:00 | `presencia.py` | Fichajes de ayer por establecimiento, olvidos de salida, € por hora (y semanal los lunes) |
 | 15:00 / 22:10 | `ventas.py` | Ventas del día: cafeterías, tiendas+charcutería, por local, total |
 | 15:05 / 22:15 | `productos.py` | Top 10 productos: empresa, por local, por establecimiento |
-| 9:00-21:00 cada 30 min | `cocina.py` | Tiempos de cocina de las 5 cafeterías: «Min. total» (Analytics → Auditoría Cocina → Resumen) del día y de la última hora, con semáforo (🟢 <10, 🟡 10-15, 🔴 >15 min) |
+| 9:00-21:00 cada 30 min | `cocina.py` | Tiempos de cocina de las 5 cafeterías: «Min. total» (Analytics → Auditoría Cocina → Resumen) del día y de la última hora, con semáforo (🟢 <10, 🟡 10-15, 🔴 >15 min); al canal y en privado a TELEGRAM_USUARIOS |
 | 23:00 | `cierres.py` | Cierres de caja (Z): caja, nº Z, hora, persona, importe, efectivo |
 | 09:00 | `cierres.py --repaso` | Solo si hace falta: Z del día anterior que llegaron tarde (venta corregida) o cajas aún sin cierre |
 | lunes 08:00 | `periodos.py --semana` | Ventas y top 10 de la semana, con importes de la anterior |
