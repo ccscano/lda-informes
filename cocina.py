@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Tiempos de cocina de las cafeterías por Telegram (HiOffice / Analytics → Auditoría Cocina → Resumen).
+Tiempos de cocina de las cafeterías por Telegram (HiOffice / Analytics → Auditoría Cocina).
 
-Se ejecuta cada 30 minutos de 9:00 a 21:00 (cocina.timer) y manda en privado a
-TELEGRAM_USUARIOS (presencia.telegram), por cafetería, el
-«Min. total» (minutos de media desde que se marcha una comanda hasta que se sirve) de lo que va de
-día y de la última hora, con las unidades servidas y un semáforo (umbrales BUENO / REGULAR).
+Se ejecuta cada 30 minutos de 9:00 a 21:00 (cocina.timer) y manda en privado a TELEGRAM_USUARIOS
+(presencia.telegram), por cafetería, el «Min. total» (minutos de media desde que se marcha una línea
+de comanda hasta que se sirve) de las líneas servidas en la última media hora, con un semáforo
+(umbrales BUENO / REGULAR), y el de todo el día. Una línea cuenta como servida a su «Fecha Inicio»
+más su «Min. total».
 
 Uso: cocina.py [AAAA-MM-DD] [--no-enviar]
 """
@@ -18,16 +19,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import presencia as base
 
-# Bloque «Por horas» de la pestaña Resumen del dashboard Auditoría Cocina
-DASHBOARD, BLOCK, DATASOURCE = 15005, 48302, 12031
+# Bloque «Detalle tiempos cocina» del dashboard Auditoría Cocina (una fila por línea de comanda)
+DASHBOARD, BLOCK, DATASOURCE = 15005, 48301, 12031
 # (nombre, tipo, origen, ids, posición, internalId)
 COLUMNAS = [
     ("Establecimiento", "String", "Attribute", {"attributeId": 1061}, 1, 1),
-    ("Hora", "Integer", "Attribute", {"attributeId": 1077}, 2, 2),
-    ("Uds. Servidas", "BigDecimal", "Metric", {"metricId": 12066}, 3, 3),
-    ("#", "BigDecimal", "Metric", {"metricId": 15008}, 4, 4),
-    ("Min. total", "BigDecimal", "Metric", {"metricId": 15014}, 5, 5),
+    ("Guid Línea", "Guid", "Attribute", {"attributeId": 12444}, 2, 2),
+    ("Fecha Inicio", "Datetime", "Attribute", {"attributeId": 1663}, 3, 3),
+    ("Uds. Servidas", "BigDecimal", "Metric", {"metricId": 12066}, 4, 4),
+    ("#", "BigDecimal", "Metric", {"metricId": 15008}, 5, 5),
+    ("Min. total", "BigDecimal", "Metric", {"metricId": 15014}, 6, 6),
 ]
+VENTANA = 30              # minutos del semáforo
 BUENO, REGULAR = 10, 15   # minutos: < BUENO 🟢, hasta REGULAR 🟡, más 🔴
 NOMBRE = {"Cafeteria Paseo": "Paseo", "Cafeteria Torrecardenas": "Torrecárdenas", "Cafeteria Rambla": "Rambla",
           "Cafeteria Aguadulce": "Aguadulce", "Cafeteria Playa": "Playa"}
@@ -41,10 +44,10 @@ def columna(nombre, tipo, origen, ids, pos, internal_id):
 
 
 def tiempos(token, dia):
-    """{cafetería: {hora: (uds, nº, min_total)}} del día."""
+    """{cafetería: [(servida, uds, nº, min_total)]}: las líneas de comanda del día."""
     f = dia.strftime("%Y/%m/%d")
     body = {
-        "offset": 0, "limit": 500, "totals": False, "rest": False,
+        "offset": 0, "limit": 20000, "totals": False, "rest": False,
         "datasources": [{"id": DATASOURCE}],
         "columns": [columna(*c) for c in COLUMNAS],
         "ordenableColumns": [],
@@ -71,18 +74,20 @@ def tiempos(token, dia):
         datos = json.load(r)
     res = {}
     for fila in datos.get("rows") or []:
-        _, estab, hora, uds, n, total = fila[:6]
-        if not estab or hora is None:
+        _, estab, _, inicio, uds, n, total = fila[:7]
+        if not estab or not inicio:
             continue
-        res.setdefault(estab.strip(), {})[int(hora)] = (float(uds or 0), float(n or 0), float(total or 0))
+        total = float(total or 0)
+        servida = dt.datetime.fromisoformat(inicio) + dt.timedelta(minutes=total)
+        res.setdefault(estab.strip(), []).append((servida, float(uds or 0), float(n or 0), total))
     return res
 
 
-def media(horas):
-    """(uds, min_total) de varias horas: la media de cada hora ponderada por su nº de líneas."""
-    uds = sum(h[0] for h in horas)
-    n = sum(h[1] for h in horas)
-    return uds, (sum(h[1] * h[2] for h in horas) / n if n and uds else None)
+def media(lineas):
+    """(uds, min_total) de varias líneas: la media ponderada por su nº."""
+    uds = sum(x[1] for x in lineas)
+    n = sum(x[2] for x in lineas)
+    return uds, (sum(x[2] * x[3] for x in lineas) / n if n and uds else None)
 
 
 def mins(m):
@@ -94,22 +99,26 @@ def semaforo(m):
 
 
 def texto(datos, dia, ahora):
-    desde = (ahora - dt.timedelta(hours=1)).hour if ahora.date() == dia else None
+    hoy = ahora.date() == dia
     lineas = [f"👨‍🍳 <b>Tiempos de cocina</b> · {base.DIAS[dia.weekday()]} {dia:%d/%m}"
-              + (f" a las {ahora:%H:%M}" if desde is not None else "")]
+              + (f" a las {ahora:%H:%M}" if hoy else "")]
+    desde = ahora - dt.timedelta(minutes=VENTANA)
     for estab in sorted(NOMBRE, key=lambda e: NOMBRE[e]):
-        horas = datos.get(estab, {})
-        uds, m = media(list(horas.values()))
-        if m is None:
-            lineas.append(f"⚪ <b>{NOMBRE[estab]}</b>: sin comandas")
+        todas = datos.get(estab, [])
+        uds_d, m_d = media(todas)
+        if not hoy:
+            lineas.append(f"{semaforo(m_d)} <b>{NOMBRE[estab]}</b>: <b>{mins(m_d)}</b> ({uds_d:.0f} uds)"
+                          if m_d is not None else f"⚪ <b>{NOMBRE[estab]}</b>: sin comandas")
             continue
-        linea = f"{semaforo(m)} <b>{NOMBRE[estab]}</b>: <b>{mins(m)}</b> ({uds:.0f} uds)"
-        if desde is not None:
-            uds_h, m_h = media([v for h, v in horas.items() if h >= desde])
-            linea += f" · última hora {mins(m_h)} ({uds_h:.0f} uds)" if m_h is not None else " · última hora sin comandas"
-        lineas.append(linea)
-    lineas.append(f"<i>Min. total de media por unidad (Auditoría Cocina → Resumen). "
-                  f"🟢 menos de {BUENO} · 🟡 {BUENO}-{REGULAR} · 🔴 más de {REGULAR}</i>")
+        uds, m = media([x for x in todas if desde < x[0] <= ahora])
+        dia_txt = f" · día {mins(m_d)} ({uds_d:.0f} uds)" if m_d is not None else ""
+        if m is None:
+            lineas.append(f"⚪ <b>{NOMBRE[estab]}</b>: sin comandas servidas en {VENTANA} min{dia_txt}")
+        else:
+            lineas.append(f"{semaforo(m)} <b>{NOMBRE[estab]}</b>: <b>{mins(m)}</b> ({uds:.0f} uds){dia_txt}")
+    lineas.append(f"<i>Min. total de media por unidad (Auditoría Cocina)"
+                  + (f" de lo servido en los últimos {VENTANA} min" if hoy else "")
+                  + f". 🟢 menos de {BUENO} · 🟡 {BUENO}-{REGULAR} · 🔴 más de {REGULAR}</i>")
     return "\n".join(lineas)
 
 

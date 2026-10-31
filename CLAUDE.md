@@ -19,7 +19,7 @@ Desde el 31/10/2026 todo va **en privado** al chat de Carlos con el bot @ladulce
 | 04:00 | `presencia.py` | Fichajes de ayer por establecimiento, olvidos de salida, € por hora (y semanal los lunes) |
 | 15:00 / 22:10 | `ventas.py` | Ventas del día: cafeterías, tiendas+charcutería, por local, total |
 | 15:05 / 22:15 | `productos.py` | Top 10 productos: empresa, por local, por establecimiento |
-| 9:00-21:00 cada 30 min | `cocina.py` | Tiempos de cocina de las 5 cafeterías: «Min. total» (Analytics → Auditoría Cocina → Resumen) del día y de la última hora, con semáforo (🟢 <10, 🟡 10-15, 🔴 >15 min) |
+| 9:00-21:00 cada 30 min | `cocina.py` | Tiempos de cocina de las 5 cafeterías: «Min. total» (Analytics → Auditoría Cocina) de lo servido en los últimos 30 min, con semáforo (🟢 <10, 🟡 10-15, 🔴 >15 min), y el del día |
 | 23:00 | `cierres.py` | Cierres de caja (Z): caja, nº Z, hora, persona, importe, efectivo |
 | 09:00 | `cierres.py --repaso` | Solo si hace falta: Z del día anterior que llegaron tarde (venta corregida) o cajas aún sin cierre |
 | lunes 08:00 | `periodos.py --semana` | Ventas y top 10 de la semana, con importes de la anterior |
@@ -99,5 +99,5 @@ Tras cambiar `bot_lda.py`: reiniciar `bot-lda.service`.
   terraza y charcutería de Paseo el 22/10/2026) suben el Z a HiOffice horas después: de ahí el repaso
   de las 09:00, que compara con lo enviado a las 23:00 (`datos/cierres_enviados.json`). Torrecárdenas hace el Z
   a la mañana siguiente.
-- Auditoría Cocina: dashboard 15005, bloque «Por horas» 48302 (pestaña Resumen), datasource 12031; Min. total = métrica 15014 (media), nº de líneas = 15008 (para ponderar horas). La estructura de un dashboard se lee con `POST /ErpCloud/report/list/Dashboard` `{"entity":"Dashboard","input":{"id":…,"dimensionId":0},"blocks":[]}`.
+- Auditoría Cocina: dashboard 15005, datasource 12031. `cocina.py` usa el bloque «Detalle tiempos cocina» 48301 (una fila por línea, atributo Guid Línea 12444); una línea se da por servida a «Fecha Inicio» (1663) + Min. total (métrica 15014); nº de líneas = 15008 (para ponderar). Las medias del día así coinciden con la pestaña Resumen (bloque «Por horas» 48302). La estructura de un dashboard se lee con `POST /ErpCloud/report/list/Dashboard` `{"entity":"Dashboard","input":{"id":…,"dimensionId":0},"blocks":[]}`.
 - Excluidos de presencia: SUPERVISOR, TECNICO SEISOFT, JAVIER CS. El Obrador no vende (fuera del €/h).
