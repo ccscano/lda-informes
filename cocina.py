@@ -2,8 +2,8 @@
 """
 Tiempos de cocina de las cafeterías por Telegram (HiOffice / Analytics → Auditoría Cocina → Resumen).
 
-Se ejecuta cada 30 minutos de 9:00 a 21:00 (cocina.timer) y manda al canal y en privado a
-TELEGRAM_USUARIOS, por cafetería, el
+Se ejecuta cada 30 minutos de 9:00 a 21:00 (cocina.timer) y manda en privado a
+TELEGRAM_USUARIOS (presencia.telegram), por cafetería, el
 «Min. total» (minutos de media desde que se marcha una comanda hasta que se sirve) de lo que va de
 día y de la última hora, con las unidades servidas y un semáforo (umbrales BUENO / REGULAR).
 
@@ -122,9 +122,6 @@ def main():
     print(t)
     if "--no-enviar" not in sys.argv:
         base.telegram(cfg, t)
-        # y en privado a TELEGRAM_USUARIOS (como avisos.py)
-        for uid in [x.strip() for x in cfg.get("TELEGRAM_USUARIOS", "").replace(";", ",").split(",") if x.strip()]:
-            base.telegram({**cfg, "TELEGRAM_CHAT_ID": uid}, t)
 
 
 if __name__ == "__main__":

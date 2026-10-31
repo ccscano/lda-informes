@@ -10,14 +10,16 @@ La Dulce Alianza: los advisors de inversión y el IB Gateway siguen en el VPS an
 Cortafuegos (ufw): solo 22, 80 y 443 abiertos. Montaje inicial: `migracion/preparar_vps.sh`.
 
 ## Qué se envía y cuándo
-Todo va al canal de Telegram "La Dulce ALianza" (id en `.env`) con el bot @ladulcealianzacom_bot.
+Desde el 31/10/2026 todo va **en privado** al chat de Carlos con el bot @ladulcealianzacom_bot
+(ids de `TELEGRAM_USUARIOS` en `.env`): `presencia.telegram()` envía a `presencia.destinos()`. El canal
+"La Dulce Alianza" (`TELEGRAM_CHAT_ID`) ya no se usa; solo se cae a él si `TELEGRAM_USUARIOS` estuviera vacío.
 
 | Hora | Script | Contenido |
 |---|---|---|
 | 04:00 | `presencia.py` | Fichajes de ayer por establecimiento, olvidos de salida, € por hora (y semanal los lunes) |
 | 15:00 / 22:10 | `ventas.py` | Ventas del día: cafeterías, tiendas+charcutería, por local, total |
 | 15:05 / 22:15 | `productos.py` | Top 10 productos: empresa, por local, por establecimiento |
-| 9:00-21:00 cada 30 min | `cocina.py` | Tiempos de cocina de las 5 cafeterías: «Min. total» (Analytics → Auditoría Cocina → Resumen) del día y de la última hora, con semáforo (🟢 <10, 🟡 10-15, 🔴 >15 min); al canal y en privado a TELEGRAM_USUARIOS |
+| 9:00-21:00 cada 30 min | `cocina.py` | Tiempos de cocina de las 5 cafeterías: «Min. total» (Analytics → Auditoría Cocina → Resumen) del día y de la última hora, con semáforo (🟢 <10, 🟡 10-15, 🔴 >15 min) |
 | 23:00 | `cierres.py` | Cierres de caja (Z): caja, nº Z, hora, persona, importe, efectivo |
 | 09:00 | `cierres.py --repaso` | Solo si hace falta: Z del día anterior que llegaron tarde (venta corregida) o cajas aún sin cierre |
 | lunes 08:00 | `periodos.py --semana` | Ventas y top 10 de la semana, con importes de la anterior |
@@ -80,7 +82,7 @@ Tras cambiar `bot_lda.py`: reiniciar `bot-lda.service`.
 
 ## Reglas
 - **No leer, mostrar ni editar `.env`** (credenciales de HiOffice y token del bot). Los scripts lo leen solos.
-- Probar siempre con `--no-enviar` antes de mandar algo al canal; el canal lo ve más gente.
+- Probar siempre con `--no-enviar` antes de mandar un informe.
 - Tras cambiar código: `git add -A && git commit -m "…" && git push`.
 - No tocar nada fuera de `/home/lda`.
 

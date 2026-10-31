@@ -321,8 +321,15 @@ def bloque_semanal(token, filas, domingo):
     return "\n".join(lineas)
 
 
+def destinos(cfg):
+    """Chats a los que van los informes: en privado a TELEGRAM_USUARIOS (desde el 31/10/2026 ya no
+    se usa el canal TELEGRAM_CHAT_ID); si no hay usuarios, al canal."""
+    usuarios = [x.strip() for x in cfg.get("TELEGRAM_USUARIOS", "").replace(";", ",").split(",") if x.strip()]
+    return usuarios or [cfg["TELEGRAM_CHAT_ID"]]
+
+
 def telegram(cfg, texto):
-    """Envía por trozos de < 4000 caracteres (límite de Telegram)."""
+    """Envía a destinos(cfg) por trozos de < 4000 caracteres (límite de Telegram)."""
     trozos, actual = [], ""
     for linea in texto.split("\n"):
         if len(actual) + len(linea) + 1 > 3900:
@@ -330,8 +337,8 @@ def telegram(cfg, texto):
             actual = ""
         actual += linea + "\n"
     trozos.append(actual)
-    for t in trozos:
-        datos = urllib.parse.urlencode({"chat_id": cfg["TELEGRAM_CHAT_ID"], "text": t,
+    for t, chat in [(t, c) for c in destinos(cfg) for t in trozos]:
+        datos = urllib.parse.urlencode({"chat_id": chat, "text": t,
                                         "parse_mode": "HTML", "disable_web_page_preview": "true"}).encode()
         with urllib.request.urlopen(f"https://api.telegram.org/bot{cfg['TELEGRAM_TOKEN']}/sendMessage",
                                     data=datos, timeout=30) as r:
