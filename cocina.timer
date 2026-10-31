@@ -1,0 +1,9 @@
+[Unit]
+Description=Tiempos de cocina cada 30 minutos de 9:00 a 21:00
+
+[Timer]
+OnCalendar=*-*-* 09..20:00,30:00
+OnCalendar=*-*-* 21:00:00
+
+[Install]
+WantedBy=timers.target
