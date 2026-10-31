@@ -81,7 +81,7 @@ def media(horas):
     """(uds, min_total) de varias horas: la media de cada hora ponderada por su nº de líneas."""
     uds = sum(h[0] for h in horas)
     n = sum(h[1] for h in horas)
-    return uds, (sum(h[1] * h[2] for h in horas) / n if n else None)
+    return uds, (sum(h[1] * h[2] for h in horas) / n if n and uds else None)
 
 
 def mins(m):
