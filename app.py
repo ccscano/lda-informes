@@ -319,10 +319,12 @@ class Manejador(http.server.BaseHTTPRequestHandler):
             try:
                 desde = dt.date.fromisoformat(q["desde"][0]).isoformat()
                 hasta = dt.date.fromisoformat(q["hasta"][0]).isoformat()
+                # Fin real del periodo elegido (la app recorta «hasta» a ayer si llega a hoy)
+                ref = dt.date.fromisoformat(q["ref"][0]) if q.get("ref") else None
             except (KeyError, ValueError):
                 return self.responder(400, {"error": "fechas"})
             with sqlite3.connect(f"file:{historico.DB}?mode=ro", uri=True) as con:
-                return self.responder(200, analisis.todo(con, desde, hasta, (q.get("local") or [None])[0]))
+                return self.responder(200, analisis.todo(con, desde, hasta, (q.get("local") or [None])[0], ref))
         if url.path == "/api/plantilla":
             if not self.sesion_valida():
                 return self.responder(401, {"error": "sesion"})

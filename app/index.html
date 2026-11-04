@@ -904,9 +904,9 @@ async function cargarAnalisis(id) {
   // Días cerrados: si el periodo llega a hoy, el análisis acaba ayer (salvo que sea solo hoy)
   const h = hoy(), parcial = estado.dhasta === h && estado.ddesde < h;
   const fin = parcial ? masDias(h, -1) : estado.dhasta, finC = parcial ? masDias(estado.chasta, -1) : estado.chasta;
-  const url = (d, f) => { const q = new URLSearchParams({ desde: d, hasta: f }); if (estado.local) q.set("local", estado.local); return `/api/analisis?${q}`; };
+  const url = (d, f, ref) => { const q = new URLSearchParams({ desde: d, hasta: f, ref }); if (estado.local) q.set("local", estado.local); return `/api/analisis?${q}`; };
   try {
-    const [a, c] = await Promise.all([api(url(estado.ddesde, fin)).then(r => r.json()), api(url(estado.cdesde, finC)).then(r => r.json())]);
+    const [a, c] = await Promise.all([api(url(estado.ddesde, fin, estado.dhasta)).then(r => r.json()), api(url(estado.cdesde, finC, estado.chasta)).then(r => r.json())]);
     if (id !== peticion) return;
     estado.an = a; estado.anC = c;
     pintarResumen(estado.act, estado.cmp); pintarAnalisis(); pintarAnomalias(); pintarControlCajas();
@@ -925,7 +925,10 @@ function pintarObjetivo() {
   if (card.hidden) return;
   const [y, m] = o.mes.split("-").map(Number);
   $("#obj-titulo").textContent = `Objetivo de ${MESES_LARGO[m - 1]}`;
-  $("#obj-sub").textContent = `Día ${o.dia} de ${o.dias_mes}. Objetivo = ${MESES_LARGO[m - 1]} de ${y - 1} × (1 + subida media de los últimos 12 meses). La raya marca dónde deberías ir hoy; la previsión sigue el ritmo frente al año pasado.`;
+  $("#obj-titulo").textContent += o.cerrado ? ` de ${y}` : "";
+  $("#obj-sub").textContent = o.cerrado
+    ? `Mes cerrado. Objetivo = ${MESES_LARGO[m - 1]} de ${y - 1} × (1 + subida media de los 12 meses anteriores).`
+    : `Día ${o.dia} de ${o.dias_mes}. Objetivo = ${MESES_LARGO[m - 1]} de ${y - 1} × (1 + subida media de los últimos 12 meses). La raya marca dónde deberías ir hoy; la previsión sigue el ritmo frente al año pasado.`;
   const filas = [...o.filas];
   if (filas.length > 1) {
     const t = { local: "Total", objetivo: sum(filas, f => f.objetivo), actual: sum(filas, f => f.actual), anterior_mes: sum(filas, f => f.anterior_mes),

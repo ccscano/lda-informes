@@ -210,8 +210,9 @@ def objetivo(con, local, hoy=None):
     """Mes en curso por local: objetivo = mismo mes del año anterior × (1 + subida media de los
     últimos 12 meses cerrados frente a los mismos meses del año antes); previsión a fin de mes =
     venta del año anterior en el mes × ritmo actual (venta hasta hoy ÷ venta del año anterior hasta
-    el mismo día)."""
-    hoy = hoy or dt.date.today()
+    el mismo día). `hoy` es el último día del periodo elegido (nunca más allá de hoy): así el
+    objetivo es el del mes que se está mirando, no siempre el mes en curso."""
+    hoy = min(hoy, dt.date.today()) if hoy else dt.date.today()
     filtro, args = _filtro(local)
     ini = hoy.replace(day=1)
     fin_mes = (ini + dt.timedelta(days=32)).replace(day=1) - dt.timedelta(days=1)
@@ -239,7 +240,8 @@ def objetivo(con, local, hoy=None):
                       "actual": round(actual.get(loc, 0), 2), "anterior_mes": round(ant_mes.get(loc, 0), 2),
                       "anterior_a_fecha": round(ant_mismos.get(loc, 0), 2),
                       "prevision": round(ant_mes.get(loc, 0) * ritmo, 2) if ritmo else None})
-    return {"mes": ini.strftime("%Y-%m"), "dia": hoy.day, "dias_mes": fin_mes.day, "filas": filas}
+    return {"mes": ini.strftime("%Y-%m"), "dia": hoy.day, "dias_mes": fin_mes.day,
+            "cerrado": hoy >= fin_mes, "filas": filas}
 
 
 def anomalias(con, desde, hasta, local):
@@ -320,9 +322,9 @@ def cajas(con, desde, hasta, local):
     return sorted(out, key=lambda r: (r["local"], -r["ventas"]))
 
 
-def todo(con, desde, hasta, local=None):
+def todo(con, desde, hasta, local=None, ref=None):
     return {"desde": desde, "hasta": hasta, "local": local,
             "por_hora": por_hora(con, desde, hasta, local), "mapa": mapa(con, desde, hasta, local),
             "franjas": franjas(con, desde, hasta, local), "coste": coste(con, desde, hasta, local),
-            "margen": margen(con, desde, hasta, local), "objetivo": objetivo(con, local),
+            "margen": margen(con, desde, hasta, local), "objetivo": objetivo(con, local, ref or dt.date.fromisoformat(hasta)),
             "anomalias": anomalias(con, desde, hasta, local), "cajas": cajas(con, desde, hasta, local)}
