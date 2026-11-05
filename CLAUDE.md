@@ -62,6 +62,9 @@ Desde el 31/10/2026 todo va **en privado** al chat de Carlos con el bot @ladulce
   (olvidos, turnos > 12 h, local distinto del habitual) y control de cajas (Z que faltan, vacíos,
   % efectivo; el Z de madrugada o mañana cuenta para el día anterior).
 - Familias de artículo: atributo 1465 de HiOffice → tabla `familias` (artículo → familia).
+- Tiempo de servicio de las cafeterías (Auditoría Cocina, `cocina.tiempos`) → tabla `cocina` por día, cafetería y
+  hora en que se sirve (uds, líneas, minutos = Min. total × líneas; media = minutos ÷ líneas, igual que HiOffice).
+  En la app: KPI del Resumen, tarjeta en Locales y en cada Cafetería de «Por área». Hoy se lee en directo.
 - `avisos.py` (avisos.timer, cada hora 10:40-21:40): si un local va ≥25 % por debajo del mismo día
   de la semana pasada a la misma hora, avisa en privado a TELEGRAM_USUARIOS (no al canal).
 - Acceso: código de 6 cifras que el bot manda por Telegram a `TELEGRAM_USUARIOS`; la sesión

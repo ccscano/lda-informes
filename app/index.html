@@ -264,6 +264,7 @@ nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 
   <section class="vista" id="v-locales">
     <div class="card"><h2>Por local</h2><p class="sub">Cafetería + tienda (+ charcutería en Paseo). Entre paréntesis, la variación frente a la comparación.</p><div class="filas" id="locales"></div></div>
+    <div class="card" id="card-servicio"><h2>Tiempo de servicio en cafeterías</h2><p class="sub">Minutos de media desde que se marcha una comanda hasta que se sirve (Analytics → Auditoría Cocina), ponderado por líneas. 🟢 menos de 10 · 🟡 10-15 · 🔴 más de 15 min.</p><div class="filas" id="servicio"></div></div>
     <div class="card"><h2>Por área</h2><p class="sub">Cafetería, tienda (con bollería) y charcutería de cada local, con las horas de la gente de esa área (ver Personal → Área de cada persona).</p><div class="filas" id="estabs"></div></div>
   </section>
 
@@ -523,6 +524,18 @@ function totales(d) {
   return { neto, docs, ticket: docs ? neto / docs : 0, horas, eurh: horas ? vConHoras / horas : 0,
            olvidos: sum(d.personal, p => p.olvidos), vTiendas, horasTodas };
 }
+// Tiempo de servicio (Auditoría Cocina) por local: {local: {uds, min}}; min = minutos ÷ líneas
+function servicio(d) {
+  const r = {};
+  (d.cocina || []).forEach(x => { if (x.lineas && x.uds) r[x.local] = { uds: x.uds, lineas: x.lineas, min: x.minutos / x.lineas }; });
+  return r;
+}
+function servicioTotal(d) {
+  const f = (d.cocina || []).filter(x => x.lineas && x.uds), l = sum(f, x => x.lineas);
+  return l ? sum(f, x => x.minutos) / l : null;
+}
+const semaforo = m => m < 10 ? "🟢" : m <= 15 ? "🟡" : "🔴";
+const minTxt = m => `${fmtN1.format(m)} min`;
 function delta(a, b, invertido) {
   if (!b) return `<span class="delta flat">—</span>`;
   const v = (a - b) / Math.abs(b) * 100;
@@ -644,6 +657,8 @@ function pintarResumen(act, cmp) {
     kpi("€ por hora" + (estado.parcial ? " (días cerrados)" : ""), a.eurh ? fmtEur2.format(a.eurh) : "—", c.eurh ? fmtEur2.format(c.eurh) : "—", delta(a.eurh, c.eurh)),
     sinVentas ? "" : (() => { const ca = costeTotal(estado.an), cc = costeTotal(estado.anC);
       return kpi("Coste de personal" + (estado.parcial ? " (días cerrados)" : ""), ca == null ? "…" : pct(ca), cc == null ? "" : pct(cc), ca == null || cc == null ? "" : delta(ca, cc, true)); })(),
+    sinVentas ? "" : (() => { const sa = servicioTotal(act), sc = servicioTotal(cmp);
+      return sa == null ? "" : kpi("Tiempo de servicio", minTxt(sa), sc == null ? "" : minTxt(sc), sc == null ? "" : delta(sa, sc, true)); })(),
     kpi("Olvidos de salida", fmtN.format(a.olvidos), fmtN.format(c.olvidos), delta(a.olvidos, c.olvidos, true)),
   ].join("");
 
@@ -722,6 +737,17 @@ function pintarLocales(act, cmp) {
       <div class="barra"><span style="width:${a.neto / max * 100}%"></span></div></div>`;
   }).join("") : `<div class="vacio">Sin ventas en este periodo.</div>`;
 
+  // Tiempo de servicio de cada cafetería (Auditoría Cocina)
+  const sA = servicio(act), sC = servicio(cmp);
+  const kc = Object.keys(sA).sort((a, b) => sA[a].min - sA[b].min), maxs = Math.max(...kc.map(k => sA[k].min), 1);
+  $("#card-servicio").hidden = !kc.length;
+  $("#servicio").innerHTML = kc.map(k => {
+    const a = sA[k], c = sC[k];
+    return `<div class="fila"><div class="nom">${semaforo(a.min)} ${esc(k)}</div><div class="der num">${minTxt(a.min)}</div>
+      <div class="det num"><span>${c ? `${delta(a.min, c.min, true)} vs ${minTxt(c.min)}` : "sin comparación"}</span><span>${fmtN.format(a.uds)} uds servidas</span></div>
+      <div class="barra"><span style="width:${a.min / maxs * 100}%"></span></div></div>`;
+  }).join("");
+
   // Por área: ventas de la caja del área y horas de la gente asignada a ella
   const porArea = d => {
     const r = {};
@@ -741,7 +767,8 @@ function pintarLocales(act, cmp) {
       <div class="det"><span>Horas de personas sin área: asígnalas en Personal para repartirlas.</span></div></div>`;
     return `<div class="fila"><div class="nom">${esc(loc)} · ${esc(area)}</div><div class="der num">${eur(a.neto)}</div>
       <div class="det num"><span>${delta(a.neto, c.neto)}</span><span>${fmtN.format(a.docs)} tickets</span><span>ticket ${fmtEur2.format(a.docs ? a.neto / a.docs : 0)}</span>
-      ${a.horas ? `<span>${horasTxt(a.horas)}</span><span><b>${fmtEur2.format(r)}/h</b> ${delta(r, rc)}</span><span>${fmtN1.format(a.docs / a.horas)} tickets/h</span>` : ""}</div>
+      ${a.horas ? `<span>${horasTxt(a.horas)}</span><span><b>${fmtEur2.format(r)}/h</b> ${delta(r, rc)}</span><span>${fmtN1.format(a.docs / a.horas)} tickets/h</span>` : ""}
+      ${area === "Cafetería" && sA[loc] ? `<span>${semaforo(sA[loc].min)} servicio <b>${minTxt(sA[loc].min)}</b> ${sC[loc] ? delta(sA[loc].min, sC[loc].min, true) : ""}</span>` : ""}</div>
       <div class="barra"><span style="width:${a.neto / maxe * 100}%"></span></div></div>`;
   }).join("") : `<div class="vacio">Sin ventas en este periodo.</div>`;
 }

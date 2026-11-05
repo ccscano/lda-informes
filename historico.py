@@ -8,6 +8,7 @@ Guarda, por día, lo mismo que leen los informes de Telegram, reutilizando sus c
   - artículos por establecimiento (productos.articulos_dia)
   - fichajes cerrados (presencia.consultar)
   - cierres de caja (cierres.cierres)
+  - tiempos de cocina de las cafeterías por hora en que se sirve (cocina.tiempos, Auditoría Cocina)
 
 Uso:
   historico.py                         refresco diario: ventas/productos/cierres de los últimos
@@ -26,6 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cierres
+import cocina
 import presencia as base
 import productos
 import ventas
@@ -55,6 +57,9 @@ CREATE TABLE IF NOT EXISTS cierres (
     venta REAL, docs REAL, efectivo REAL, entrada REAL, salida REAL, calculado REAL,
     declarado REAL, descuadre REAL, retirado REAL, fianza REAL,
     PRIMARY KEY (estab, caja, numero));
+CREATE TABLE IF NOT EXISTS cocina (
+    dia TEXT, estab TEXT, local TEXT, hora INTEGER, uds REAL, lineas REAL, minutos REAL,
+    PRIMARY KEY (dia, estab, hora));
 CREATE TABLE IF NOT EXISTS cargas (tabla TEXT, dia TEXT, actualizado TEXT, PRIMARY KEY (tabla, dia));
 CREATE INDEX IF NOT EXISTS ix_productos_dia ON productos (dia);
 CREATE INDEX IF NOT EXISTS ix_fichajes_dia ON fichajes (dia);
@@ -207,9 +212,28 @@ def cargar_cierres(con, token, desde, hasta):
         time.sleep(PAUSA)
 
 
+def cargar_cocina(con, token, desde, hasta):
+    """Por cafetería y hora en que se sirve: uds, nº de líneas y minutos (Min. total × nº), así la
+    media de cualquier periodo es minutos ÷ líneas, como la de Auditoría Cocina."""
+    for d in dias(desde, hasta):
+        suma = {}
+        for estab, lineas in reintentar(cocina.tiempos, token, d).items():
+            for servida, uds, n, total in lineas:
+                x = suma.setdefault((estab, servida.hour), [0, 0, 0])
+                x[0] += uds
+                x[1] += n
+                x[2] += n * total
+        con.execute("DELETE FROM cocina WHERE dia = ?", (d.isoformat(),))
+        con.executemany("INSERT INTO cocina VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        [(d.isoformat(), e, ventas.local(e), h, u, n, m) for (e, h), (u, n, m) in suma.items()])
+        marcar(con, "cocina", d)
+        con.commit()
+        time.sleep(PAUSA)
+
+
 CARGAS = {"ventas": cargar_ventas, "ventas_hora": cargar_ventas_hora,
           "ventas_empleado": cargar_ventas_empleado, "familias": cargar_familias, "productos": cargar_productos,
-          "fichajes": cargar_fichajes, "cierres": cargar_cierres}
+          "fichajes": cargar_fichajes, "cierres": cargar_cierres, "cocina": cargar_cocina}
 
 
 def main():

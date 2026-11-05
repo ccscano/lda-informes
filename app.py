@@ -76,6 +76,7 @@ def refrescar_hoy():
                     historico.cargar_ventas_hora(con, directo["token"], hoy, hoy)
                     historico.cargar_productos(con, directo["token"], hoy, hoy)
                     historico.cargar_cierres(con, directo["token"], hoy, hoy)
+                    historico.cargar_cocina(con, directo["token"], hoy, hoy)
                 finally:
                     con.close()
                 directo["ultimo"] = time.time()
@@ -224,13 +225,21 @@ def datos(desde, hasta, local=None, corte=None):
             f"declarado, descuadre FROM cierres WHERE dia BETWEEN ? AND ? {filtro} ORDER BY fecha DESC",
             [d0, d1, *args])]
 
+    # Tiempo de servicio de las cafeterías (Auditoría Cocina): media = minutos ÷ líneas; con corte,
+    # el último día solo hasta la hora del corte (por hora en que se sirve)
+    hay_cocina = con.execute("SELECT 1 FROM sqlite_master WHERE name = 'cocina'").fetchone()
+    cocina = [dict(r) for r in con.execute(
+        f"SELECT local, SUM(uds) uds, SUM(lineas) lineas, SUM(minutos) minutos FROM cocina "
+        f"WHERE dia BETWEEN ? AND ? AND (dia < ? OR hora < ?) {filtro} GROUP BY local",
+        [d0, d1, d1, corte.hour if cortar else 24, *args])] if hay_cocina else []
+
     locales = sorted({r[0] for r in con.execute(f"SELECT DISTINCT local FROM ventas WHERE 1 {fuera}", NO_SON_LOCALES)})
     actualizado = con.execute("SELECT MAX(actualizado) FROM cargas").fetchone()[0]
     primer_dia = con.execute("SELECT MIN(dia) FROM ventas WHERE neto > 0").fetchone()[0]
     con.close()
     return {"desde": d0, "hasta": d1, "local": local, "corte": corte.strftime("%H:%M") if corte else None,
             "ventas": ventas, "horas": horas,
-            "personal": personal, "productos": productos, "familias": familias, "cierres": cierres,
+            "personal": personal, "productos": productos, "familias": familias, "cierres": cierres, "cocina": cocina,
             "locales": locales, "actualizado": actualizado, "primer_dia": primer_dia}
 
 
